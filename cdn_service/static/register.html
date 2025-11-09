@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Events</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8">
+            <div>
+                <h2 class="mt-6 text-center text-3xl font-bold text-gray-900">
+                    Create your account
+                </h2>
+                <p class="mt-2 text-center text-sm text-gray-600">
+                    Or
+                    <a href="/login" class="font-medium text-blue-600 hover:text-blue-500">
+                        sign in to existing account
+                    </a>
+                </p>
+            </div>
+            
+            <form class="mt-8 space-y-6" onsubmit="handleRegister(event)">
+                <div class="rounded-md shadow-sm space-y-4">
+                    <div>
+                        <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
+                            Username
+                        </label>
+                        <input 
+                            id="username" 
+                            name="username" 
+                            type="text" 
+                            required 
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                            placeholder="Choose a username"
+                        >
+                    </div>
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                            Password
+                        </label>
+                        <input 
+                            id="password" 
+                            name="password" 
+                            type="password" 
+                            required 
+                            minlength="6"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                            placeholder="Create a password (min 6 characters)"
+                        >
+                    </div>
+                </div>
+
+                <div id="error-message" class="hidden text-red-600 text-sm text-center bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                </div>
+
+                <div id="success-message" class="hidden text-green-600 text-sm text-center bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                </div>
+
+                <div>
+                    <button 
+                        type="submit" 
+                        id="submit-btn"
+                        class="group relative w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition"
+                    >
+                        Create account
+                    </button>
+                </div>
+
+                <div class="text-center">
+                    <a href="/" class="text-sm text-gray-600 hover:text-gray-900">
+                        ← Back to events
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Environment variables injected from Go template
+        const FRONTEND_URL = '{{.FrontendURL}}';
+        
+        async function handleRegister(event) {
+            event.preventDefault();
+            
+            const submitBtn = document.getElementById('submit-btn');
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating account...';
+            errorMessage.classList.add('hidden');
+            successMessage.classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Registration failed');
+                }
+                
+                // Show success message
+                successMessage.textContent = 'Account created successfully! Redirecting to login...';
+                successMessage.classList.remove('hidden');
+                
+                // Redirect to login after 2 seconds
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
+                
+            } catch (error) {
+                errorMessage.textContent = error.message;
+                errorMessage.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create account';
+            }
+        }
+    </script>
+</body>
+</html>

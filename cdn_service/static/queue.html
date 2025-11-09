@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue - Waiting Room</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .pulse-ring {
+            animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse-ring {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.5;
+                transform: scale(1.05);
+            }
+        }
+        
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: blink 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div x-data="queueApp()" x-init="init()">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200">
+            <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div class="text-center">
+                    <h1 class="text-2xl font-semibold text-gray-900">Ticket Queue</h1>
+                    <p class="text-sm text-gray-500 mt-1">Please wait while we prepare your tickets</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            
+            <!-- Connection Status -->
+            <div x-show="connectionStatus !== 'connected'" class="mb-8">
+                <!-- Connecting -->
+                <div x-show="connectionStatus === 'connecting'" class="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                    <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4">
+                        <svg class="animate-spin h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    <p class="text-blue-800 font-medium">Connecting to queue...</p>
+                </div>
+
+                <!-- Error -->
+                <div x-show="connectionStatus === 'error'" class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                    <div class="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-4">
+                        <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </div>
+                    <p class="text-red-800 font-medium mb-3">Connection failed</p>
+                    <button @click="reconnect()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">
+                        Try Again
+                    </button>
+                </div>
+            </div>
+
+            <!-- Queue Display -->
+            <div x-show="connectionStatus === 'connected'" class="space-y-8">
+                
+                <!-- Main Queue Card -->
+                <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                    <!-- Status Header -->
+                    <div class="gradient-bg px-8 py-12 text-center text-white">
+                        <div class="inline-flex items-center justify-center space-x-2 mb-4">
+                            <div class="status-dot bg-white"></div>
+                            <span class="text-sm font-medium uppercase tracking-wide" x-text="status === 'waiting' ? 'In Queue' : 'Admitted'"></span>
+                        </div>
+                        
+                        <!-- Position Display -->
+                        <div x-show="status === 'waiting'">
+                            <div class="text-6xl font-bold mb-2" x-text="positionInQueue.toLocaleString()"></div>
+                            <p class="text-white/90 text-lg">Your position in line</p>
+                        </div>
+                        
+                        <!-- Admitted Display -->
+                        <div x-show="status === 'admitted'" class="space-y-4">
+                            <div class="inline-flex items-center justify-center w-20 h-20 bg-white/20 rounded-full mb-2">
+                                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-4xl font-bold mb-2">You're In!</div>
+                                <p class="text-white/90 text-lg">Redirecting to tickets...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Details Section -->
+                    <div x-show="status === 'waiting'" class="px-8 py-8 space-y-6">
+                        <!-- Estimated Wait -->
+                        <div class="flex items-center justify-between pb-6 border-b border-gray-200">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex items-center justify-center w-10 h-10 bg-purple-100 rounded-lg">
+                                    <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500">Estimated wait time</p>
+                                    <p class="text-2xl font-semibold text-gray-900" x-text="estimatedWaitTime + ' min'"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div>
+                            <div class="flex justify-between text-sm text-gray-600 mb-2">
+                                <span>Queue Progress</span>
+                                <span x-text="Math.min(100, Math.round((1000000 - positionInQueue) / 1000000 * 100)) + '%'"></span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                <div 
+                                    class="progress-bar bg-gradient-to-r from-purple-500 to-blue-500 h-3 rounded-full"
+                                    :style="`width: ${Math.min(100, Math.round((1000000 - positionInQueue) / 1000000 * 100))}%`"
+                                ></div>
+                            </div>
+                        </div>
+
+                        <!-- Info Cards -->
+                        <div class="grid grid-cols-2 gap-4 pt-4">
+                            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                                <p class="text-gray-500 text-xs uppercase tracking-wide mb-1">People Ahead</p>
+                                <p class="text-2xl font-bold text-gray-900" x-text="(peopleAheadInQueue).toLocaleString()"></p>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                                <p class="text-gray-500 text-xs uppercase tracking-wide mb-1">Active Buyers</p>
+                                <p class="text-2xl font-bold text-gray-900" x-text="(totalPeopleInQueue).toLocaleString()"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tips Card -->
+                <div x-show="status === 'waiting'" class="bg-blue-50 border border-blue-100 rounded-lg p-6">
+                    <div class="flex items-start space-x-3">
+                        <div class="flex-shrink-0">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-medium text-blue-900 mb-2">While you wait...</h3>
+                            <ul class="text-sm text-blue-800 space-y-1">
+                                <li>✓ Keep this page open - closing it will lose your place</li>
+                                <li>✓ Your position updates automatically every few seconds</li>
+                                <li>✓ Have your payment information ready</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connection Info -->
+                <div class="text-center text-sm text-gray-500">
+                    <p>Session ID: <span class="font-mono text-xs" x-text="sessionId.substring(0, 8) + '...'"></span></p>
+                    <p class="mt-1">Connected • Updates every 2 seconds</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Environment variables injected from Go template
+        const WEBSOCKET_URL = '{{.WebsocketURL}}';
+        
+        function queueApp() {
+            return {
+                ws: null,
+                connectionStatus: 'connecting',
+                status: 'waiting',
+                positionInQueue: 0,
+                estimatedWaitTime: 0,
+                peopleAheadInQueue: 0,
+                totalPeopleInQueue: 0,
+                sessionId: '',
+
+                eventId: new URLSearchParams(window.location.search).get('event_id'),
+
+                init() {
+                    this.connect();
+                },
+
+                connect() {
+                    this.connectionStatus = 'connecting';
+                    
+                    const wsUrl = `${WEBSOCKET_URL}/ws?eventId=${this.eventId}`;
+                    
+                    console.log('Connecting to:', wsUrl);
+                    this.ws = new WebSocket(wsUrl);
+                                        
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.connectionStatus = 'connected';
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        console.log('Received:', data);
+
+                        this.estimatedWaitTime = (data.estimatedWaitTime / 100) || this.estimatedWaitTime;
+                        this.positionInQueue = data.positionInQueue || this.positionInQueue;
+                        this.peopleAheadInQueue = data.peopleAheadInQueue || this.peopleAheadInQueue;
+                        this.totalPeopleInQueue = data.totalPeopleInQueue || this.totalPeopleInQueue;
+
+                        if (data.acceptedTokenId !== "") {
+                            if (data.token) {
+                                localStorage.setItem('queueToken', data.acceptedTokenId);
+                            }
+                            window.location.href = `/choose-tickets?eventId=${this.eventId}&token=${data.acceptedTokenId}`;
+                        }
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.connectionStatus = 'error';
+                    };
+                    
+                    this.ws.onclose = () => {
+                        console.log('WebSocket closed');
+                        if (this.connectionStatus === 'connected') {
+                            this.connectionStatus = 'error';
+                        }
+                    };
+                },
+
+                reconnect() {
+                    if (this.ws) {
+                        this.ws.close();
+                    }
+                    this.connect();
+                },
+
+                destroy() {
+                    if (this.ws) {
+                        this.ws.close();
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('beforeunload', () => {
+            const app = Alpine.$data(document.querySelector('[x-data]'));
+            if (app && app.destroy) {
+                app.destroy();
+            }
+        });
+    </script>
+</body>
+</html>

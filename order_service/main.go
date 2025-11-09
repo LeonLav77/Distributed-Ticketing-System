@@ -1,0 +1,160 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"github.com/streadway/amqp"
+)
+
+type OrderCreatedMessage struct {
+	EventID          string `json:"event_id"`
+	TicketType       string `json:"ticket_type"`
+	Quantity         int    `json:"quantity"`
+	UserID           int    `json:"user_id"`
+	OrderReferenceId string `json:"order_reference_id"`
+}
+
+type OrderPaymentSuccessMessage struct {
+	OrderReferenceId string `json:"order_reference_id"`
+}
+
+var (
+	db *sql.DB
+)
+
+func main() {
+	godotenv.Load()
+
+	connStr := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		os.Getenv("POSTGRES_HOST"),
+		os.Getenv("POSTGRES_PORT"),
+		os.Getenv("POSTGRES_USER"),
+		os.Getenv("POSTGRES_PASSWORD"),
+		os.Getenv("POSTGRES_DB"),
+		os.Getenv("POSTGRES_SSLMODE"),
+	)
+
+	log.Printf("Connecting to PostgreSQL at %s:%s...",
+		os.Getenv("POSTGRES_HOST"),
+		os.Getenv("POSTGRES_PORT"),
+	)
+
+	var err error
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+	defer db.Close()
+
+	rabbitMQConnection, err := createRabbitMQConnection()
+	if err != nil {
+		panic(err)
+	}
+	defer rabbitMQConnection.Close()
+
+	rabbitMQChannel, err := createRabbitMQChannel(rabbitMQConnection)
+	if err != nil {
+		panic(err)
+	}
+	defer rabbitMQChannel.Close()
+
+	orderSuccessQueueName := os.Getenv("QUEUE_ORDER_PAYMENT_SUCCESS")
+	orderCreatedQueueName := os.Getenv("QUEUE_ORDER_CREATED")
+
+	log.Printf("Setting up queues: %s, %s", orderSuccessQueueName, orderCreatedQueueName)
+
+	orderSuccessQueue, err := createStandardRabbitMQQueue(rabbitMQChannel, orderSuccessQueueName)
+	if err != nil {
+		panic(err)
+	}
+
+	orderSuccessMessages, err := createStandardRabbitMQMessagesChannel(rabbitMQChannel, &orderSuccessQueue)
+	if err != nil {
+		panic(err)
+	}
+
+	// Declare order.created queue
+	orderCreatedQueue, err := createStandardRabbitMQQueue(rabbitMQChannel, orderCreatedQueueName)
+	if err != nil {
+		panic(err)
+	}
+
+	// Consume order.created messages
+	orderCreatedMessages, err := createStandardRabbitMQMessagesChannel(rabbitMQChannel, &orderCreatedQueue)
+	if err != nil {
+		panic(err)
+	}
+
+	forever := make(chan struct{})
+
+	go handleOrderSuccessMessages(orderSuccessMessages)
+
+	go handleOrderCreatedMessages(orderCreatedMessages)
+
+	<-forever
+}
+
+func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery){
+	for message := range orderCreatedMessages {
+		log.Printf("📝 Received order created: %s\n", string(message.Body))
+
+		data := OrderCreatedMessage{}
+		err := json.Unmarshal(message.Body, &data)
+		if err != nil {
+			log.Printf("Failed to unmarshal message: %v\n", err)
+			message.Nack(false, false)
+			continue
+		}
+
+		log.Printf("Received order created message: %+v\n", data)
+
+		query := `INSERT INTO orders (user_id, ticket_type, ticket_quantity, event_id, order_reference_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`
+		var orderID int
+
+		err = db.QueryRow(query, data.UserID, data.TicketType, data.Quantity, data.EventID, data.OrderReferenceId).Scan(&orderID)
+		if err != nil {
+			log.Printf("Failed to insert order: %v\n", err)
+			message.Nack(false, false)
+			continue
+		}
+
+		log.Printf("Order created successfully with ID %d for user ID %d\n", orderID, data.UserID)
+
+		message.Ack(false)
+	}
+}
+
+func handleOrderSuccessMessages(orderSuccessMessages <-chan amqp.Delivery){
+	for message := range orderSuccessMessages {
+		log.Printf("📩 Received order payment success: %s\n", string(message.Body))
+
+		data := OrderPaymentSuccessMessage{}
+		err := json.Unmarshal(message.Body, &data)
+		if err != nil {
+			log.Printf("Failed to unmarshal message: %v\n", err)
+			message.Nack(false, false)
+			continue
+		}
+
+		log.Printf("Received order payment success message: %+v\n", data)
+
+		query := `UPDATE orders SET status = 'completed' WHERE order_reference_id = $1`
+		_, err = db.Exec(query, data.OrderReferenceId)
+		if err != nil {
+			log.Printf("Failed to update order status: %v\n", err)
+			message.Nack(false, false)
+			continue
+		}
+
+		log.Printf("Order status updated to completed for order reference ID %s\n", data.OrderReferenceId)
+
+		message.Ack(false)
+	}
+}

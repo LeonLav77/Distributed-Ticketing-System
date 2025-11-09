@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  app-9000:
+    build: .
+    ports:
+      - "9000:8080"
+    restart: unless-stopped
+
+  app-9001:
+    build: .
+    ports:
+      - "9001:8080"
+    restart: unless-stopped
+
+  app-9002:
+    build: .
+    ports:
+      - "9002:8080"
+    restart: unless-stopped
+
+  app-9003:
+    build: .
+    ports:
+      - "9003:8080"
+    restart: unless-stopped
+
+  app-9004:
+    build: .
+    ports:
+      - "9004:8080"
+    restart: unless-stopped
+
+  app-9005:
+    build: .
+    ports:
+      - "9005:8080"
+    restart: unless-stopped

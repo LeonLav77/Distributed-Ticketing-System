@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concerts & Events</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .event-card {
+            transition: all 0.2s ease;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .event-card:hover {
+            background-color: #fafafa;
+        }
+        
+        .event-card:last-child {
+            border-bottom: none;
+        }
+        
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        .image-container {
+            aspect-ratio: 16/9;
+        }
+        
+        @media (max-width: 640px) {
+            .image-container {
+                aspect-ratio: 4/3;
+            }
+        }
+    </style>
+</head>
+<body class="bg-white text-gray-900">
+    <div x-data="concertApp()" x-init="init()">
+        <!-- Header -->
+        <header class="border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h1 class="text-2xl font-semibold text-gray-900">Events</h1>
+                        <p class="text-sm text-gray-500 mt-1">Discover live experiences near you</p>
+                    </div>
+                    
+                    <!-- Auth Buttons -->
+                    <div class="flex items-center space-x-3">
+                        <div id="auth-buttons" class="flex items-center space-x-3">
+                            <a href="/login" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition">
+                                Sign in
+                            </a>
+                            <a href="/register" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">
+                                Sign up
+                            </a>
+                        </div>
+                        <div id="user-menu" class="hidden flex items-center space-x-3">
+                            <span class="text-sm text-gray-700" id="username-display"></span>
+                            <button onclick="handleLogout()" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition">
+                                Sign out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                    <div class="flex-1"></div>
+                    
+                    <!-- Filter Pills -->
+                    <div class="hidden sm:flex items-center space-x-2">
+                        <button 
+                            @click="setFilter('all')"
+                            :class="activeFilter === 'all' ? 'bg-black text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                            class="px-4 py-2 text-sm font-medium rounded-full transition">
+                            All Events
+                        </button>
+                        <button 
+                            @click="setFilter('weekend')"
+                            :class="activeFilter === 'weekend' ? 'bg-black text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                            class="px-4 py-2 text-sm font-medium rounded-full transition">
+                            This Weekend
+                        </button>
+                        <button 
+                            @click="setFilter('month')"
+                            :class="activeFilter === 'month' ? 'bg-black text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                            class="px-4 py-2 text-sm font-medium rounded-full transition">
+                            This Month
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Mobile Filter Pills -->
+                <div class="sm:hidden flex items-center space-x-2 mt-4 overflow-x-auto pb-2">
+                    <button 
+                        @click="setFilter('all')"
+                        :class="activeFilter === 'all' ? 'bg-black text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                        class="px-4 py-2 text-sm font-medium rounded-full transition whitespace-nowrap">
+                        All Events
+                    </button>
+                    <button 
+                        @click="setFilter('weekend')"
+                        :class="activeFilter === 'weekend' ? 'bg-black text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                        class="px-4 py-2 text-sm font-medium rounded-full transition whitespace-nowrap">
+                        This Weekend
+                    </button>
+                    <button 
+                        @click="setFilter('month')"
+                        :class="activeFilter === 'month' ? 'bg-black text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                        class="px-4 py-2 text-sm font-medium rounded-full transition whitespace-nowrap">
+                        This Month
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Loading State -->
+            <div x-show="loading" class="space-y-6">
+                <template x-for="i in 3">
+                    <div class="flex flex-col sm:flex-row bg-white rounded-lg overflow-hidden">
+                        <div class="skeleton h-48 sm:h-40 sm:w-64"></div>
+                        <div class="flex-1 p-6 space-y-4">
+                            <div class="skeleton h-6 w-3/4 rounded"></div>
+                            <div class="skeleton h-4 w-1/2 rounded"></div>
+                            <div class="skeleton h-4 w-1/3 rounded"></div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Error State -->
+            <div x-show="error && !loading" class="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
+                <p class="font-medium">Unable to load events</p>
+                <p class="text-sm mt-1" x-text="error"></p>
+                <button @click="fetchConcerts()" class="mt-3 text-sm font-medium text-red-700 hover:text-red-800">
+                    Try again →
+                </button>
+            </div>
+
+            <!-- Events List -->
+            <div x-show="!loading && !error && filteredConcerts.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <template x-for="concert in filteredConcerts" :key="concert.id">
+                    <div class="event-card flex flex-col sm:flex-row cursor-pointer group">
+                        <!-- Event Image -->
+                        <div class="sm:w-64 lg:w-80 bg-gray-100 relative overflow-hidden">
+                            <div class="image-container w-full">
+                                <img 
+                                    x-show="concert.imageDataUrl && !concert.imageError"
+                                    :src="concert.imageDataUrl" 
+                                    :alt="concert.performerName"
+                                    class="w-full h-full object-cover"
+                                    @error="concert.imageError = true"
+                                >
+                                
+                                <!-- Fallback -->
+                                <div 
+                                    x-show="!concert.imageDataUrl || concert.imageError" 
+                                    class="w-full h-full flex items-center justify-center bg-gray-100"
+                                >
+                                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Event Details -->
+                        <div class="flex-1 p-6 sm:p-8">
+                            <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between">
+                                <div class="flex-1">
+                                    <!-- Date -->
+                                    <div class="text-sm font-medium text-red-600 mb-2" x-text="formatDateShort(concert.date_and_time)"></div>
+                                    
+                                    <!-- Title -->
+                                    <h3 class="text-xl sm:text-2xl font-semibold text-gray-900 mb-3 group-hover:text-blue-600 transition">
+                                        <span x-text="concert.performerName"></span>
+                                    </h3>
+                                    
+                                    <!-- Venue & Location -->
+                                    <div class="space-y-1 text-gray-600">
+                                        <p class="text-base" x-text="concert.venueName"></p>
+                                        <p class="text-sm" x-text="formatTime(concert.date_and_time)"></p>
+                                    </div>
+
+                                    <!-- Status Badge -->
+                                    <div x-show="concert.status" class="mt-3">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <span x-text="concert.status"></span>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Price/Action -->
+                                <div class="mt-4 lg:mt-0 lg:ml-8 lg:text-right">
+                                    <button class="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition text-sm" @click="findTickets(concert.id)">
+                                        Find Tickets
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="!loading && filteredConcerts.length === 0 && !error" class="text-center py-16">
+                <svg class="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                </svg>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No upcoming events</h3>
+                <p class="text-gray-500">Check back soon for new events in your area</p>
+            </div>
+
+            <!-- Results Count -->
+            <div x-show="!loading && filteredConcerts.length > 0" class="mt-6 text-sm text-gray-500">
+                <span x-text="filteredConcerts.length"></span> events found
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Environment variables injected from Go template
+        const DIRECTUS_API_URL = '{{.DirectusAPIURL}}';
+        
+        function concertApp() {
+            return {
+                concerts: [],
+                loading: true,
+                error: null,
+                activeFilter: 'all',
+                apiUrl: DIRECTUS_API_URL,
+                accessToken: null,
+
+                init() {
+                    this.checkAuth();
+                    this.fetchConcerts();
+                },
+
+                get filteredConcerts() {
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    
+                    if (this.activeFilter === 'all') {
+                        return this.concerts;
+                    }
+                    
+                    if (this.activeFilter === 'weekend') {
+                        const today = now.getDay();
+                        const daysUntilSaturday = (6 - today + 7) % 7 || 7;
+                        const nextSaturday = new Date(now);
+                        nextSaturday.setDate(now.getDate() + daysUntilSaturday);
+                        
+                        const nextSunday = new Date(nextSaturday);
+                        nextSunday.setDate(nextSaturday.getDate() + 1);
+                        nextSunday.setHours(23, 59, 59, 999);
+                        
+                        return this.concerts.filter(concert => {
+                            if (!concert.date_and_time) return false;
+                            const concertDate = new Date(concert.date_and_time);
+                            return concertDate >= nextSaturday && concertDate <= nextSunday;
+                        });
+                    }
+                    
+                    if (this.activeFilter === 'month') {
+                        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                        endOfMonth.setHours(23, 59, 59, 999);
+                        
+                        return this.concerts.filter(concert => {
+                            if (!concert.date_and_time) return false;
+                            const concertDate = new Date(concert.date_and_time);
+                            return concertDate >= now && concertDate <= endOfMonth;
+                        });
+                    }
+                    
+                    return this.concerts;
+                },
+
+                checkAuth() {
+                    const token = localStorage.getItem('auth_token');
+                    if (token) {
+                        try {
+                            const payload = JSON.parse(atob(token.split('.')[1]));
+                            document.getElementById('auth-buttons').classList.add('hidden');
+                            document.getElementById('user-menu').classList.remove('hidden');
+                            document.getElementById('username-display').textContent = payload.username;
+                        } catch (e) {
+                            localStorage.removeItem('auth_token');
+                        }
+                    }
+                },
+
+                setFilter(filter) {
+                    this.activeFilter = filter;
+                },
+
+                async fetchConcerts() {
+                    try {
+                        this.loading = true;
+                        this.error = null;
+
+                        const response = await fetch(
+                            `${this.apiUrl}/items/concerts?fields=*,performer.performers_id.*,venue.venues_id.*&sort=date_and_time`
+                        );
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+
+                        const data = await response.json();
+                        
+                        this.concerts = await Promise.all((data.data || []).map(async concert => {
+                            let performerName = 'TBA';
+                            if (concert.performer && concert.performer.length > 0) {
+                                const firstPerformer = concert.performer[0];
+                                if (firstPerformer && firstPerformer.performers_id) {
+                                    performerName = firstPerformer.performers_id.Name || 'TBA';
+                                }
+                            }
+
+                            let venueName = 'Venue TBA';
+                            if (concert.venue && concert.venue.length > 0) {
+                                const firstVenue = concert.venue[0];
+                                if (firstVenue && firstVenue.venues_id) {
+                                    venueName = firstVenue.venues_id.Name || 'Venue TBA';
+                                }
+                            }
+
+                            let imageDataUrl = null;
+                            if (concert.display_image) {
+                                imageDataUrl = await this.fetchImageAsDataUrl(concert.display_image);
+                            }
+
+                            return {
+                                ...concert,
+                                performerName,
+                                venueName,
+                                imageDataUrl,
+                                imageError: false
+                            };
+                        }));
+                        
+                    } catch (err) {
+                        console.error('Error:', err);
+                        this.error = err.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async fetchImageAsDataUrl(imageId) {
+                    try {
+                        const url = `${this.apiUrl}/assets/${imageId}`;
+                        const headers = {};
+                        
+                        if (this.accessToken) {
+                            headers['Authorization'] = `Bearer ${this.accessToken}`;
+                        }
+
+                        const response = await fetch(url, { headers });
+                        
+                        if (!response.ok) {
+                            console.error(`Failed to fetch image ${imageId}: ${response.status}`);
+                            return null;
+                        }
+
+                        const blob = await response.blob();
+                        return URL.createObjectURL(blob);
+                    } catch (err) {
+                        console.error('Error fetching image:', err);
+                        return null;
+                    }
+                },
+
+                formatDateShort(dateString) {
+                    if (!dateString) return 'Date TBA';
+                    
+                    const date = new Date(dateString);
+                    const options = { 
+                        weekday: 'short',
+                        month: 'short', 
+                        day: 'numeric'
+                    };
+                    
+                    return date.toLocaleDateString('en-US', options).toUpperCase();
+                },
+
+                formatTime(dateString) {
+                    if (!dateString) return '';
+                    
+                    const date = new Date(dateString);
+                    const timeOptions = { 
+                        hour: 'numeric',
+                        minute: '2-digit'
+                    };
+                    
+                    return date.toLocaleTimeString('en-US', timeOptions);
+                },
+
+                findTickets(eventId){
+                    window.location.href = `/queue?event_id=${eventId}`;
+                }
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('auth_token');
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Choose Your Tickets</title>
+</head>
+<body>
+<div x-data="ticketChooserApp()" x-init="init()">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="text-center">
+                <h1 class="text-2xl font-semibold text-gray-900">Choose Your Tickets</h1>
+                <p class="text-sm text-gray-500 mt-1">Select the tickets you'd like to purchase</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        
+        <!-- Loading State -->
+        <div x-show="loading" class="space-y-4">
+            <div class="bg-white rounded-lg p-6 animate-pulse">
+                <div class="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+                <div class="h-4 bg-gray-200 rounded w-2/3"></div>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div x-show="error && !loading" class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <svg class="mx-auto h-12 w-12 text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p class="text-red-800 font-medium mb-3">Unable to load tickets</p>
+            <button @click="fetchTickets()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">
+                Try Again
+            </button>
+        </div>
+
+        <!-- Tickets List -->
+        <div x-show="!loading && !error" class="space-y-8">
+            
+            <!-- Ticket Cards -->
+            <div class="space-y-4">
+                <template x-for="ticket in availableTickets" :key="ticket.ticketType">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition"
+                         :class="selectedTicketType && selectedTicketType !== ticket.ticketType ? 'opacity-50' : ''">
+                        <div class="p-6">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                                <!-- Ticket Info -->
+                                <div class="flex-1 mb-4 sm:mb-0">
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <h3 class="text-lg font-semibold text-gray-900 capitalize" x-text="formatTicketType(ticket.ticketType)"></h3>
+                                        <span 
+                                            x-show="ticket.quantity < 50"
+                                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                            Only <span x-text="ticket.quantity"></span> left
+                                        </span>
+                                    </div>
+                                    <p class="text-2xl font-bold text-gray-900">$100.00</p>
+                                    <p class="text-sm text-gray-500 mt-1">
+                                        <span x-text="ticket.quantity"></span> available
+                                    </p>
+                                </div>
+
+                                <!-- Quantity Selector -->
+                                <div class="flex items-center space-x-4">
+                                    <div class="flex items-center space-x-3 bg-gray-50 rounded-lg p-2">
+                                        <button 
+                                            @click="decrementQuantity(ticket.ticketType)"
+                                            :disabled="getSelectedQuantity(ticket.ticketType) === 0"
+                                            :class="getSelectedQuantity(ticket.ticketType) === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-200'"
+                                            class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-300 transition">
+                                            <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                                            </svg>
+                                        </button>
+                                        
+                                        <span class="text-lg font-semibold text-gray-900 w-8 text-center" x-text="getSelectedQuantity(ticket.ticketType)"></span>
+                                        
+                                        <button 
+                                            @click="incrementQuantity(ticket.ticketType)"
+                                            :disabled="isIncrementDisabled(ticket)"
+                                            :class="isIncrementDisabled(ticket) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-200'"
+                                            class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-300 transition">
+                                            <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Summary Card -->
+            <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border border-purple-100 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Order Summary</h3>
+                </div>
+                
+                <div class="space-y-3 mb-4">
+                    <div x-show="selectedTicketType" class="flex justify-between text-sm">
+                        <span class="text-gray-600">
+                            <span x-text="selectedQuantity"></span>x <span class="capitalize" x-text="formatTicketType(selectedTicketType)"></span>
+                        </span>
+                        <span class="font-medium text-gray-900" x-text="'$' + (selectedQuantity * 100).toFixed(2)"></span>
+                    </div>
+                    
+                    <div x-show="!selectedTicketType" class="text-sm text-gray-500 italic">
+                        No tickets selected
+                    </div>
+                </div>
+                
+                <div class="pt-4 border-t border-purple-200">
+                    <div class="flex justify-between items-center mb-6">
+                        <span class="text-lg font-semibold text-gray-900">Total</span>
+                        <span class="text-2xl font-bold text-gray-900" x-text="'$' + totalPrice.toFixed(2)"></span>
+                    </div>
+                    
+                    <button 
+                        @click="proceedToCheckout()"
+                        :disabled="!selectedTicketType"
+                        :class="!selectedTicketType ? 'opacity-50 cursor-not-allowed' : 'hover:from-purple-600 hover:to-blue-600'"
+                        class="w-full py-3 px-6 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium rounded-lg transition">
+                        Continue to Checkout
+                        <span x-show="selectedTicketType" x-text="'(' + selectedQuantity + ' ticket' + (selectedQuantity !== 1 ? 's' : '') + ')'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="bg-blue-50 border border-blue-100 rounded-lg p-5">
+                <div class="flex items-start space-x-3">
+                    <svg class="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div class="text-sm text-blue-800">
+                        <p class="font-medium mb-1">Important Information</p>
+                        <ul class="space-y-1">
+                            <li>• Maximum 10 tickets per transaction</li>
+                            <li>• Only one ticket type per transaction</li>
+                            <li>• Tickets are non-refundable</li>
+                            <li>• Price shown is per ticket</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Environment variables injected from Go template
+    const API_BASE_URL = '{{.APIBaseURL}}';
+    
+    function ticketChooserApp() {
+        return {
+            loading: true,
+            error: null,
+            availableTickets: [],
+            selectedTicketType: null,
+            selectedQuantity: 0,
+            eventId: new URLSearchParams(window.location.search).get('eventId'),
+            token: new URLSearchParams(window.location.search).get('token'),
+
+            get totalPrice() {
+                return this.selectedQuantity * 100;
+            },
+
+            init() {
+                this.fetchTickets();
+            },
+
+            async fetchTickets() {
+                try {
+                    this.loading = true;
+                    this.error = null;
+
+                    const response = await fetch(`${API_BASE_URL}/get-available-tickets?eventId=${this.eventId}`);
+                    console.log('Fetch response:', response);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    this.availableTickets = data.availableTickets || [];
+                    
+                } catch (err) {
+                    console.error('Error fetching tickets:', err);
+                    this.error = err.message;
+                } finally {
+                    this.loading = false;
+                }
+            },
+
+            formatTicketType(type) {
+                return type.replace(/-/g, ' ').replace(/_/g, ' ');
+            },
+
+            getSelectedQuantity(ticketType) {
+                return this.selectedTicketType === ticketType ? this.selectedQuantity : 0;
+            },
+
+            isIncrementDisabled(ticket) {
+                if (this.selectedTicketType && this.selectedTicketType !== ticket.ticketType) {
+                    return true;
+                }
+                return this.selectedQuantity >= Math.min(ticket.quantity, 10);
+            },
+
+            incrementQuantity(ticketType) {
+                if (this.selectedTicketType && this.selectedTicketType !== ticketType) {
+                    return;
+                }
+
+                const ticket = this.availableTickets.find(t => t.ticketType === ticketType);
+                
+                if (this.selectedQuantity < Math.min(ticket.quantity, 10)) {
+                    this.selectedTicketType = ticketType;
+                    this.selectedQuantity++;
+                }
+            },
+
+            decrementQuantity(ticketType) {
+                if (this.selectedTicketType === ticketType && this.selectedQuantity > 0) {
+                    this.selectedQuantity--;
+                    if (this.selectedQuantity === 0) {
+                        this.selectedTicketType = null;
+                    }
+                }
+            },
+
+            proceedToCheckout() {
+                if (!this.selectedTicketType || this.selectedQuantity === 0) return;
+                
+                const order = {
+                    eventId: this.eventId,
+                    token: this.token,
+                    ticketType: this.selectedTicketType,
+                    quantity: this.selectedQuantity,
+                };
+
+                console.log('Proceeding to checkout with:', order);
+
+                result = fetch(`${API_BASE_URL}/reserve-tickets`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ` + cookieValue('auth_token'),
+                    },
+                    body: JSON.stringify(order)
+                })
+
+                result.then(async (response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const data = await response.json();
+                    console.log('Reservation successful:', data);
+
+                    window.location.href = data.checkoutUrl;
+
+                }).catch((err) => {
+                    console.error('Error during reservation:', err);
+                    alert('There was an error reserving your tickets. Please try again.');
+                });
+            }
+        }
+    }
+
+    function cookieValue(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+</script>
+</body>
+</html>
