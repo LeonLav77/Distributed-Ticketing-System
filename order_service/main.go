@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -22,6 +23,11 @@ type OrderCreatedMessage struct {
 
 type OrderPaymentSuccessMessage struct {
 	OrderReferenceId string `json:"order_reference_id"`
+}
+
+type TicketData struct {
+	SeatNumber string
+	Price      float64
 }
 
 var (
@@ -80,13 +86,11 @@ func main() {
 		panic(err)
 	}
 
-	// Declare order.created queue
 	orderCreatedQueue, err := createStandardRabbitMQQueue(rabbitMQChannel, orderCreatedQueueName)
 	if err != nil {
 		panic(err)
 	}
 
-	// Consume order.created messages
 	orderCreatedMessages, err := createStandardRabbitMQMessagesChannel(rabbitMQChannel, &orderCreatedQueue)
 	if err != nil {
 		panic(err)
@@ -95,13 +99,12 @@ func main() {
 	forever := make(chan struct{})
 
 	go handleOrderSuccessMessages(orderSuccessMessages)
-
 	go handleOrderCreatedMessages(orderCreatedMessages)
 
 	<-forever
 }
 
-func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery){
+func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery) {
 	for message := range orderCreatedMessages {
 		log.Printf("📝 Received order created: %s\n", string(message.Body))
 
@@ -115,23 +118,66 @@ func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery){
 
 		log.Printf("Received order created message: %+v\n", data)
 
-		query := `INSERT INTO orders (user_id, ticket_type, ticket_quantity, event_id, order_reference_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`
-		var orderID int
-
-		err = db.QueryRow(query, data.UserID, data.TicketType, data.Quantity, data.EventID, data.OrderReferenceId).Scan(&orderID)
+		tx, err := db.Begin()
 		if err != nil {
-			log.Printf("Failed to insert order: %v\n", err)
+			log.Printf("Failed to begin transaction: %v\n", err)
 			message.Nack(false, false)
 			continue
 		}
 
-		log.Printf("Order created successfully with ID %d for user ID %d\n", orderID, data.UserID)
+		query := `INSERT INTO orders (user_id, event_id, order_reference_id, total_quantity) 
+		          VALUES ($1, $2, $3, $4) RETURNING id`
+		var orderID int
+
+		err = tx.QueryRow(query, data.UserID, data.EventID, data.OrderReferenceId, data.Quantity).Scan(&orderID)
+		if err != nil {
+			log.Printf("Failed to insert order: %v\n", err)
+			tx.Rollback()
+			message.Nack(false, false)
+			continue
+		}
+
+		for i := 0; i < data.Quantity; i++ {
+			ticket := generateTicketData()
+
+			ticketQuery := `INSERT INTO tickets 
+			                (order_id, ticket_type, seat_number, price) 
+			                VALUES ($1, $2, $3, $4)`
+
+			_, err = tx.Exec(ticketQuery,
+				orderID,
+				data.TicketType,
+				ticket.SeatNumber,
+				ticket.Price,
+			)
+
+			if err != nil {
+				log.Printf("Failed to insert ticket: %v\n", err)
+				tx.Rollback()
+				message.Nack(false, false)
+				break
+			}
+		}
+
+		if err != nil {
+			continue
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			log.Printf("Failed to commit transaction: %v\n", err)
+			message.Nack(false, false)
+			continue
+		}
+
+		log.Printf("Order created successfully with ID %d for user ID %d with %d tickets\n",
+			orderID, data.UserID, data.Quantity)
 
 		message.Ack(false)
 	}
 }
 
-func handleOrderSuccessMessages(orderSuccessMessages <-chan amqp.Delivery){
+func handleOrderSuccessMessages(orderSuccessMessages <-chan amqp.Delivery) {
 	for message := range orderSuccessMessages {
 		log.Printf("📩 Received order payment success: %s\n", string(message.Body))
 
@@ -156,5 +202,15 @@ func handleOrderSuccessMessages(orderSuccessMessages <-chan amqp.Delivery){
 		log.Printf("Order status updated to completed for order reference ID %s\n", data.OrderReferenceId)
 
 		message.Ack(false)
+	}
+}
+
+
+func generateTicketData() TicketData {
+	price := 50.0
+
+	return TicketData{
+		SeatNumber: fmt.Sprintf("%d", rand.Intn(500)+1),
+		Price:      price,
 	}
 }

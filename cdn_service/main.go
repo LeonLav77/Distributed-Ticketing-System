@@ -42,6 +42,7 @@ func main() {
 
 	// Protected routes
 	http.HandleFunc("/queue", authenticateJWT(handleQueue(staticFilesPath)))
+	http.HandleFunc("/profile", authenticateJWT(handleProfile(staticFilesPath)))
 	http.HandleFunc("/choose-tickets", authenticateJWT(handleChooseTickets(staticFilesPath)))
 
 	// Public routes
@@ -86,6 +87,19 @@ func handleQueue(staticFilesPath string) http.HandlerFunc {
 		}
 		filePath := filepath.Join(staticFilesPath, "queue.html")
 		tmpl, err := template.ParseFiles(filePath)
+		if err != nil {
+			http.Error(w, "Template error", http.StatusInternalServerError)
+			return
+		}
+		tmpl.Execute(w, getPageData())
+	}
+}
+
+func handleProfile(staticFilesPath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filePath := filepath.Join(staticFilesPath, "profile.html")
+		tmpl, err := template.ParseFiles(filePath)
+		
 		if err != nil {
 			http.Error(w, "Template error", http.StatusInternalServerError)
 			return
