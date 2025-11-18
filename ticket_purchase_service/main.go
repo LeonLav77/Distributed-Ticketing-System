@@ -18,10 +18,11 @@ import (
 	"github.com/streadway/amqp"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
+
 var (
-	etcdClient *clientv3.Client
-	redisClient *redis.Client
-	rabbitMQConn *amqp.Connection
+	etcdClient      *clientv3.Client
+	redisClient     *redis.Client
+	rabbitMQConn    *amqp.Connection
 	rabbitMQChannel *amqp.Channel
 )
 
@@ -192,7 +193,7 @@ func handleReserveTicketsAndRedirectToCheckout(w http.ResponseWriter, r *http.Re
 	orderReferenceId := generateOrderReferenceID()
 
 	go sendRabbitMQMessage("order.created", []byte(fmt.Sprintf(`{"event_id":"%s","ticket_type":"%s","quantity":%d,"user_id":%d,"order_reference_id":"%s"}`, requestData.EventId, requestData.TicketType, requestData.Quantity, userID, orderReferenceId)))
-	
+
 	checkoutURL, err := createCheckoutSession(orderReferenceId, requestData)
 	if err != nil {
 		log.Printf("Failed to create checkout session: %v", err)
@@ -208,7 +209,6 @@ func handleReserveTicketsAndRedirectToCheckout(w http.ResponseWriter, r *http.Re
 	})
 }
 
-// TODO: PROMJENIT LOGIKU REDIS STORANJA, JER SADA GLEDA :BASIC A U TICKETENTRY SE OPET SPOMINJE TYPE
 func handleGetAvailableTickets(w http.ResponseWriter, r *http.Request) {
 	eventId := r.URL.Query().Get("eventId")
 	admissionToken := r.URL.Query().Get("admission_token")
@@ -222,14 +222,15 @@ func handleGetAvailableTickets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var response TicketAvailabilityResponse
-	response.EventId = eventId
+	ticketType := "basic"
+	key := fmt.Sprintf("event:%s:available_tickets:%s", eventId, ticketType)
 
-	availableTickets, err := redisClient.Get(r.Context(), "event:"+eventId+":available_tickets:basic").Result()
+	availableBasicTickets, err := redisClient.Get(r.Context(), key).Result()
 
-	if err == redis.Nil || err != nil || availableTickets == "" || availableTickets == "[]" {
-		log.Printf("Redis miss/empty for eventId %s, fetching from etcd", eventId)
-		etcdAvailableBasicTickets, etcdErr := getAvailableTicketsFromEtcd(eventId, "basic")
+	var quantity int
+	if err == redis.Nil || err != nil {
+		log.Printf("Redis miss for eventId %s, fetching from etcd", eventId)
+		quantity, etcdErr := getAvailableTicketsFromEtcd(eventId, ticketType)
 
 		if etcdErr != nil {
 			log.Printf("Error fetching from etcd: %v", etcdErr)
@@ -237,39 +238,25 @@ func handleGetAvailableTickets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("Fetched from etcd: %d basic tickets available", etcdAvailableBasicTickets)
-		response.AvailableTickets = []TicketAvailabilityEntry{
-			{TicketType: "basic", Quantity: etcdAvailableBasicTickets},
-		}
-
-		go storeAvailableTicketsInRedis(eventId, "basic", response.AvailableTickets)
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-		return
+		log.Printf("Fetched from etcd: %d basic tickets available", quantity)
+		go storeAvailableTicketsInRedis(eventId, ticketType, quantity)
+	} else {
+		quantity, _ = strconv.Atoi(availableBasicTickets)
 	}
 
-	if err := json.Unmarshal([]byte(availableTickets), &response.AvailableTickets); err != nil {
-		log.Printf("Error parsing Redis data, falling back to etcd: %v", err)
-
-		etcdAvailableBasicTickets, _ := getAvailableTicketsFromEtcd(eventId, "basic")
-		response.AvailableTickets = []TicketAvailabilityEntry{
-			{TicketType: "basic", Quantity: etcdAvailableBasicTickets},
-		}
-
-		go storeAvailableTicketsInRedis(eventId, "basic", response.AvailableTickets)
+	response := TicketAvailabilityResponse{
+		EventId: eventId,
+		AvailableTickets: []TicketAvailabilityEntry{
+			{TicketType: ticketType, Quantity: quantity},
+		},
 	}
 
-	log.Printf("Returning tickets from Redis: %+v", response.AvailableTickets)
+	log.Printf("Returning tickets: %+v", response.AvailableTickets)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-func storeAvailableTicketsInRedis(eventId string, ticketType string, availableTickets []TicketAvailabilityEntry) error {
-	data, err := json.Marshal(availableTickets)
-	if err != nil {
-		return err
-	}
+func storeAvailableTicketsInRedis(eventId string, ticketType string, quantity int) error {
 	key := fmt.Sprintf("event:%s:available_tickets:%s", eventId, ticketType)
 	ctx := context.Background()
 
@@ -279,7 +266,7 @@ func storeAvailableTicketsInRedis(eventId string, ticketType string, availableTi
 		duration = 10 * time.Second
 	}
 
-	return redisClient.Set(ctx, key, data, duration).Err()
+	return redisClient.Set(ctx, key, quantity, duration).Err()
 }
 
 func getAvailableTicketsFromEtcd(eventId string, tier string) (int, error) {
@@ -352,10 +339,7 @@ func checkIfTicketsAvailableAndReserve(eventId string, tier string, requestAmoun
 
 			etcdClient.Put(ctx, reservationKey, strconv.Itoa(requestAmount))
 
-			updatedTickets := []TicketAvailabilityEntry{
-				{TicketType: tier, Quantity: newValue},
-			}
-			go storeAvailableTicketsInRedis(eventId, tier, updatedTickets)
+			go storeAvailableTicketsInRedis(eventId, tier, newValue)
 
 			return true, nil
 		}
