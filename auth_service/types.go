@@ -14,7 +14,7 @@ type User struct {
 	Salt     string `json:"password_salt,omitempty"`
 }
 
-type Claims struct {
+type UserClaims struct {
 	Username string `json:"username"`
 	UserID   int    `json:"user_id"`
 	jwt.RegisteredClaims
@@ -31,7 +31,6 @@ type ErrorResponse struct {
 
 var (
 	db        *sql.DB
-	jwtSecret = []byte("kaodajemorskavila")
 )
 
 var ErrUserNotFound = errors.New("user not found")

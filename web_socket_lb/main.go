@@ -90,6 +90,6 @@ func main() {
 	lb := NewLoadBalancer(backends)
 	http.HandleFunc("/ws", lb.HandleWebSocket)
 
-	log.Println("WebSocket Load Balancer starting on :3080")
-	log.Fatal(http.ListenAndServe(":3080", nil))
+	log.Println("WebSocket Load Balancer starting on :4321")
+	log.Fatal(http.ListenAndServe(":4321", nil))
 }

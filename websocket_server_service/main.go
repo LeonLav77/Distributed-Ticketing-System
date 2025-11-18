@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
@@ -24,7 +24,7 @@ var (
 
 type Client struct {
 	conn     *websocket.Conn
-	clientID string
+	userID   int
 	eventID  string
 }
 
@@ -60,7 +60,7 @@ func main() {
 	initRedis()
 
 	router := mux.NewRouter()
-	router.HandleFunc("/ws", handleWebSocket)
+	router.HandleFunc("/ws", authenticateJWT(handleWebSocket))
 	http.Handle("/", router)
 
 	serverPort := os.Getenv("SERVER_PORT")
@@ -102,60 +102,63 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// TODO: JE LI BOLJE OVO ILI REMOTE ADDR
-	clientID := uuid.New().String()
+	cookie, err := r.Cookie("auth_token")
+	if err != nil {
+		log.Printf("No auth_token cookie found for userID")
+	}
+	tokenString := cookie.Value
+	userID := extractUserIDFromJWT(tokenString)
 
 	client := &Client{
 		conn:     conn,
-		clientID: clientID,
+		userID:   userID,
 		eventID:  eventID,
 	}
 
-	log.Printf("Generated clientID: %s for eventId: %s", clientID, eventID)
-
+	log.Printf("Generated userID: %d for eventId: %s", userID, eventID)
 	queueKey := "ws-queue:" + eventID
-	err := addToQueue(queueKey, client.clientID)
+	err = addToQueue(queueKey, userID)
 	if err != nil {
 		log.Printf("Error adding client to queue: %v", err)
 		return
 	}
-	defer removeFromQueue(queueKey, client.clientID)
+	defer removeFromQueue(queueKey, userID)
 
 	done := make(chan struct{})
 
 	go sendQueueUpdates(client, queueKey, done)
 	awaitMessages(client, done)
 
-	log.Printf("WebSocket connection closed - eventId: %s, clientId: %s", eventID, clientID)
+	log.Printf("WebSocket connection closed - eventId: %s, userId: %d", eventID, userID)
 }
 
-func addToQueue(queueKey, clientID string) error {
+func addToQueue(queueKey string, userID int) error {
 	// koristi se timestamp kao score jer on osigurava redoslijed
 	score := float64(time.Now().Unix())
 	err := rdb.ZAdd(ctx, queueKey, redis.Z{
 		Score:  score,
-		Member: clientID,
+		Member: userID,
 	}).Err()
 
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Added %s to queue %s", clientID, queueKey)
+	log.Printf("Added %d to queue %s", userID, queueKey)
 	return nil
 }
 
-func removeFromQueue(queueKey, clientID string) {
-	err := rdb.ZRem(ctx, queueKey, clientID).Err()
+func removeFromQueue(queueKey string, userID int) {
+	err := rdb.ZRem(ctx, queueKey, userID).Err()
 	if err != nil {
-		log.Printf("Error removing %s from queue: %v", clientID, err)
+		log.Printf("Error removing %d from queue: %v", userID, err)
 	} else {
-		log.Printf("Removed %s from queue %s", clientID, queueKey)
+		log.Printf("Removed %d from queue %s", userID, queueKey)
 	}
 }
 
-func getQueuePosition(queueKey, clientID string) (int, error) {
-	rank, err := rdb.ZRank(ctx, queueKey, clientID).Result()
+func getQueuePosition(queueKey string, userID int) (int, error) {
+	rank, err := rdb.ZRank(ctx, queueKey, strconv.Itoa(userID)).Result()
 	if err != nil {
 		return -1, err
 	}
@@ -168,9 +171,9 @@ func getQueueSize(queueKey string) (int, error) {
 }
 
 func sendUpdate(client *Client, queueKey string) (bool, error) {
-	position, err := getQueuePosition(queueKey, client.clientID)
+	position, err := getQueuePosition(queueKey, client.userID)
 	if err != nil {
-		log.Printf("Error getting queue position for %s: %v", client.clientID, err)
+		log.Printf("Error getting queue position for %d: %v", client.userID, err)
 		return false, err
 	}
 
@@ -182,8 +185,12 @@ func sendUpdate(client *Client, queueKey string) (bool, error) {
 
 	acceptedTokenId := ""
 	shouldClose := false
-	if position < 50 {
-		acceptedTokenId = generateToken()
+	if position < 1 {
+		acceptedTokenId, err = generateAdmissionJWT(client.userID, client.eventID)
+		if err != nil {
+			log.Printf("Error generating admission JWT for user %d: %v", client.userID, err)
+			return false, err
+		}
 		shouldClose = true
 	}
 
@@ -195,7 +202,7 @@ func sendUpdate(client *Client, queueKey string) (bool, error) {
 		AcceptedTokenId:    acceptedTokenId,
 	}
 
-	log.Printf("About to send message to %s: %+v", client.clientID, updateMessage)
+	log.Printf("About to send message to %d: %+v", client.userID, updateMessage)
 
 	err = client.conn.WriteJSON(updateMessage)
 	if err != nil {
@@ -212,7 +219,7 @@ func sendQueueUpdates(client *Client, queueKey string, done chan struct{}) {
 		log.Printf("Failed to send initial update, closing connection")
 		return
 	} else if shouldClose {
-		log.Printf("Client %s accepted with token, closing connection", client.clientID)
+		log.Printf("Client %d accepted with token, closing connection", client.userID)
 
 		// Send close message (polite notification)
 		client.conn.WriteControl(websocket.CloseMessage,
@@ -237,7 +244,7 @@ func sendQueueUpdates(client *Client, queueKey string, done chan struct{}) {
 			if err != nil {
 				return
 			} else if shouldClose {
-				log.Printf("Client %s accepted with token, closing connection", client.clientID)
+				log.Printf("Client %d accepted with token, closing connection", client.userID)
 				client.conn.WriteControl(websocket.CloseMessage,
 					websocket.FormatCloseMessage(websocket.CloseNormalClosure, "accepted"),
 					time.Now().Add(time.Second))
@@ -245,14 +252,26 @@ func sendQueueUpdates(client *Client, queueKey string, done chan struct{}) {
 			}
 
 		case <-done:
-			log.Printf("Received done signal for client %s", client.clientID)
+			log.Printf("Received done signal for client %d", client.userID)
 			return
 		}
 	}
 }
 
-func generateToken() string {
-	return uuid.New().String()
+func generateAdmissionJWT(userID int, eventID string) (string, error) {
+	expirationTime := time.Now().Add(24 * time.Hour)
+	
+	claims := &AdmissionsClaims{
+		EventID: eventID,
+		UserID:   userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(getJWTSecret())
 }
 
 func awaitMessages(client *Client, done chan struct{}) {
@@ -263,15 +282,15 @@ func awaitMessages(client *Client, done chan struct{}) {
 		err := client.conn.ReadJSON(&msg)
 
 		if err != nil {
-			log.Printf("Error reading message from clientId %s: %v", client.clientID, err)
+			log.Printf("Error reading message from userId %d: %v", client.userID, err)
 			break
 		}
-		log.Printf("Received message from clientId %s: %v", client.clientID, msg)
+		log.Printf("Received message from userId %d: %v", client.userID, msg)
 
 		// Echo back
 		err = client.conn.WriteJSON(msg)
 		if err != nil {
-			log.Printf("Error writing message to clientId %s: %v", client.clientID, err)
+			log.Printf("Error writing message to userId %d: %v", client.userID, err)
 			break
 		}
 	}

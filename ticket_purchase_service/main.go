@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
@@ -210,9 +211,14 @@ func handleReserveTicketsAndRedirectToCheckout(w http.ResponseWriter, r *http.Re
 // TODO: PROMJENIT LOGIKU REDIS STORANJA, JER SADA GLEDA :BASIC A U TICKETENTRY SE OPET SPOMINJE TYPE
 func handleGetAvailableTickets(w http.ResponseWriter, r *http.Request) {
 	eventId := r.URL.Query().Get("eventId")
+	admissionToken := r.URL.Query().Get("admission_token")
+	if eventId == "" || admissionToken == "" {
+		http.Error(w, "Missing eventId or admission_token parameter", http.StatusBadRequest)
+		return
+	}
 
-	if eventId == "" {
-		http.Error(w, "Missing eventId parameter", http.StatusBadRequest)
+	if !validateAdmissionToken(eventId, admissionToken) {
+		http.Error(w, "Invalid admission token", http.StatusUnauthorized)
 		return
 	}
 
@@ -373,4 +379,22 @@ func randomString(length int) string {
 		b[i] = charset[seededRand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+func validateAdmissionToken(eventId string, token string) bool {
+	claims := AdmissionsClaims{}
+	parsedToken, err := jwt.ParseWithClaims(token, &claims, func(token *jwt.Token) (any, error) {
+		return getJWTSecret(), nil
+	})
+
+	if err != nil || parsedToken == nil || !parsedToken.Valid {
+		log.Printf("Admission token validation failed - error: %v, eventId attempted: %s", err, claims.EventID)
+		return false
+	}
+	if claims.EventID != eventId {
+		log.Printf("Admission token event ID mismatch - token eventId: %s, requested eventId: %s", claims.EventID, eventId)
+		return false
+	}
+
+	return true
 }

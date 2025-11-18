@@ -17,6 +17,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+func getJWTSecret() []byte {
+	secret := os.Getenv("JWT_SECRET")
+	return []byte(secret)
+}
+
 func main() {
 	godotenv.Load()
 
@@ -126,7 +131,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 func generateJWT(username string, userID int) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
 	
-	claims := &Claims{
+	claims := &UserClaims{
 		Username: username,
 		UserID:   userID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -136,7 +141,7 @@ func generateJWT(username string, userID int) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString(getJWTSecret())
 }
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {

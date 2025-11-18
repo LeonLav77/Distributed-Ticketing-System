@@ -156,7 +156,6 @@
 </div>
 
 <script>
-    // Environment variables injected from Go template
     const API_BASE_URL = '{{.APIBaseURL}}';
     
     function ticketChooserApp() {
@@ -167,7 +166,6 @@
             selectedTicketType: null,
             selectedQuantity: 0,
             eventId: new URLSearchParams(window.location.search).get('eventId'),
-            token: new URLSearchParams(window.location.search).get('token'),
 
             get totalPrice() {
                 return this.selectedQuantity * 100;
@@ -181,8 +179,13 @@
                 try {
                     this.loading = true;
                     this.error = null;
+                    const admission_token = localStorage.getItem('admission_token') ||cookieValue('admission_token');
+                    console.log(admission_token);
+                    if (!admission_token) {
+                        window.location.href = '/';
+                    }
 
-                    const response = await fetch(`${API_BASE_URL}/get-available-tickets?eventId=${this.eventId}`);
+                    const response = await fetch(`${API_BASE_URL}/get-available-tickets?eventId=${this.eventId}&admission_token=${admission_token}`);
                     console.log('Fetch response:', response);
                     if (!response.ok) {
                         throw new Error(`HTTP ${response.status}`);

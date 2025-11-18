@@ -209,6 +209,7 @@
                 peopleAheadInQueue: 0,
                 totalPeopleInQueue: 0,
                 sessionId: '',
+                authToken: localStorage.getItem('auth_token') || '',
 
                 eventId: new URLSearchParams(window.location.search).get('event_id'),
 
@@ -237,12 +238,11 @@
                         this.positionInQueue = data.positionInQueue || this.positionInQueue;
                         this.peopleAheadInQueue = data.peopleAheadInQueue || this.peopleAheadInQueue;
                         this.totalPeopleInQueue = data.totalPeopleInQueue || this.totalPeopleInQueue;
-
+                       
                         if (data.acceptedTokenId !== "") {
-                            if (data.token) {
-                                localStorage.setItem('queueToken', data.acceptedTokenId);
-                            }
-                            window.location.href = `/choose-tickets?eventId=${this.eventId}&token=${data.acceptedTokenId}`;
+                            localStorage.setItem('admission_token', data.acceptedTokenId);
+                            document.cookie = `admission_token=${data.acceptedTokenId}; path=/; max-age=3600`;
+                            window.location.href = `/choose-tickets?eventId=${this.eventId}`;
                         }
                     };
                     

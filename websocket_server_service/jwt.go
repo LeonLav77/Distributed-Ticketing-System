@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -24,7 +25,7 @@ type UserClaims struct {
 }
 
 func getJWTSecret() []byte {
-	secret := getEnv("JWT_SECRET", "kaodajemorskavila")
+	secret := os.Getenv("JWT_SECRET")
 	return []byte(secret)
 }
 
@@ -50,7 +51,10 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 
 		// If still no token, redirect to login
 		if tokenString == "" {
-			loginURL := getEnv("LOGIN_URL", "/login")
+			loginURL := os.Getenv("LOGIN_URL")
+			if loginURL == "" {
+				loginURL = "/login"
+			}
 			http.Redirect(w, r, loginURL, http.StatusSeeOther)
 			return
 		}
@@ -62,7 +66,7 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 
 		if err != nil || token == nil || !token.Valid {
 			log.Printf("Authentication failed - error: %v, username attempted: %s", err, claims.Username)
-			loginURL := getEnv("LOGIN_URL", "/login")
+			loginURL := os.Getenv("LOGIN_URL")
 			http.Redirect(w, r, loginURL, http.StatusSeeOther)
 			return
 		}
