@@ -27,7 +27,7 @@ var (
 )
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	port := os.Getenv("EXTERNAL_PORT")
+	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "unknown"
 	}

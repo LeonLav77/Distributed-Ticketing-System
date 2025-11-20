@@ -37,10 +37,7 @@ type NewQueueUpdateMessage struct {
 }
 
 func initRedis() {
-	redisHost := os.Getenv("REDIS_HOST")
-	redisPort := os.Getenv("REDIS_PORT")
-
-	redisAddr := redisHost + ":" + redisPort
+	redisAddr := os.Getenv("REDIS_ADDR")
 
 	rdb = redis.NewClient(&redis.Options{
 		Addr:            redisAddr,

@@ -14,7 +14,6 @@ func getPageData() PageData {
 	return PageData{
 		APIBaseURL:     os.Getenv("API_BASE_URL"),
 		AuthServiceURL: os.Getenv("AUTH_SERVICE_URL"),
-		FrontendURL:    os.Getenv("FRONTEND_URL"),
 		DirectusAPIURL: os.Getenv("DIRECTUS_API_URL"),
 		WebsocketURL:   os.Getenv("WEBSOCKET_URL"),
 	}
