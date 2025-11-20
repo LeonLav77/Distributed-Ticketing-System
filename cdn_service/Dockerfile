@@ -1,19 +1,19 @@
 FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
+
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -o main .
+
+RUN go build -o cdn_service .
 
 FROM alpine:latest
-WORKDIR /app
 
-# Copy the .env file
-COPY .env .env
-COPY --from=builder /app/main .
+WORKDIR /root/
+
+COPY --from=builder /app/cdn_service .
 COPY --from=builder /app/static ./static
 
-EXPOSE 8080
-CMD ["./main"]
+CMD ["./cdn_service"]

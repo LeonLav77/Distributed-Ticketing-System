@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   cdn_service:
-    build: // insert git repo link here //
+    image: ghcr.io/leonlav77/cdn_service:latest
     ports:
       - "8080:8080"
     environment:
@@ -17,7 +17,7 @@ services:
       - auth_service
       - websocket_service
   auth_service:
-    build: // insert git repo link here //
+    image: ghcr.io/leonlav77/auth_service:latest
     environment:
       - SERVER_PORT=8001
       - JWT_SECRET=kaodajemorskavila
@@ -40,7 +40,7 @@ services:
     ports:
       - "5432:5432"
   api_service:
-    build: // insert git repo link here //
+    image: ghcr.io/leonlav77/data_aggregator_service:latest
     environment:
       - SERVER_PORT=8000
       - JWT_SECRET=kaodajemorskavila
@@ -55,7 +55,7 @@ services:
     depends_on:
       - auth_db
   order_service:
-    build: // insert git repo link here //
+    image: ghcr.io/leonlav77/order_service:latest
     environment:
       - DB_HOST=auth_db
       - DB_PORT=5432
@@ -70,11 +70,11 @@ services:
       - auth_db
       - rabbitmq_service
   payment_processor_service:
-    build: // insert git repo link here //
+    image: ghcr.io/leonlav77/payment_processor_service:latest
     environment:
       - SERVER_PORT=8003
   ticket_purchase_service:
-    build: // insert git repo link here //
+    image: ghcr.io/leonlav77/ticket_purchase_service:latest
     environment:
       - SERVER_PORT=8004
       - HOST_IP=192.168.1.74
@@ -100,7 +100,7 @@ services:
       - rabbitmq_service
       - payment_processor_service
   websocket_service:
-    build: // insert git repo link here //
+    image: ghcr.io/leonlav77/websocket_service:latest
     environment:
       - SERVER_PORT=8002
       - REDIS_ADDR=websocket_redis_service:6379
