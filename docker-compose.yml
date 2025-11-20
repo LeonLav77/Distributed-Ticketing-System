@@ -77,7 +77,6 @@ services:
     image: ghcr.io/leonlav77/ticket_purchase_service:latest
     environment:
       - SERVER_PORT=8004
-      - HOST_IP=192.168.1.74
       - ETCD_ENDPOINT_1=etcd_service_1:2379
       - ETCD_ENDPOINT_2=etcd_service_2:2379
       - ETCD_ENDPOINT_3=etcd_service_3:2379
