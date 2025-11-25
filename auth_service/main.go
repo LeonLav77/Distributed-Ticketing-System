@@ -25,25 +25,36 @@ func getJWTSecret() []byte {
 func main() {
 	godotenv.Load()
 
-    dbUrl := os.Getenv("DB_URL")
+	dbHost := os.Getenv("DB_HOST")
 	dbUser := os.Getenv("DB_USER")
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
 	dbPort := os.Getenv("DB_PORT")
 
-	connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbUrl, dbPort, dbUser, dbPassword, dbName)
+	log.Printf("Connecting to DB: host=%s port=%s user=%s dbname=%s", dbHost, dbPort, dbUser, dbName)
+
+	connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName)
 
 	var err error
 	db, err = sql.Open("postgres", connectionString)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
+
+	// Test the connection
+	err = db.Ping()
+	if err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
+
+	log.Println("Successfully connected to database!")
 	defer db.Close()
 
 	http.HandleFunc("/register", handleRegister)
 	http.HandleFunc("/login", handleLogin)
 
 	serverPort := os.Getenv("SERVER_PORT")
+	log.Printf("Starting server on port %s", serverPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", serverPort), nil))
 }
 
@@ -65,7 +76,6 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Username already taken")
 		return
 	}
-
 
 	if user.Username == "" || user.Password == "" {
 		respondWithError(w, http.StatusBadRequest, "Username and password are required")
@@ -108,6 +118,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	user, err := getUserByUsername(credentials.Username)
 	if err != nil {
 		respondWithError(w, http.StatusUnprocessableEntity, "User does not exist")
+		return
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password+user.Salt), []byte(credentials.Password+user.Salt))
@@ -130,7 +141,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func generateJWT(username string, userID int) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
-	
+
 	claims := &UserClaims{
 		Username: username,
 		UserID:   userID,
