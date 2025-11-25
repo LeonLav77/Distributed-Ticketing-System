@@ -195,91 +195,98 @@
         </div>
     </div>
 
-    <script>
-        // Environment variables injected from Go template
-        const WEBSOCKET_URL = '{{.WebsocketURL}}';
-        
-        function queueApp() {
-            return {
-                ws: null,
-                connectionStatus: 'connecting',
-                status: 'waiting',
-                positionInQueue: 0,
-                estimatedWaitTime: 0,
-                peopleAheadInQueue: 0,
-                totalPeopleInQueue: 0,
-                sessionId: '',
-                authToken: localStorage.getItem('auth_token') || '',
+<script>
+    function queueApp() {
+        return {
+            ws: null,
+            connectionStatus: 'connecting',
+            status: 'waiting',
+            positionInQueue: 0,
+            estimatedWaitTime: 0,
+            peopleAheadInQueue: 0,
+            totalPeopleInQueue: 0,
+            sessionId: '',
+            authToken: localStorage.getItem('auth_token') || '',
 
-                eventId: new URLSearchParams(window.location.search).get('event_id'),
+            eventId: new URLSearchParams(window.location.search).get('event_id'),
 
-                init() {
-                    this.connect();
-                },
+            init() {
+                this.connect();
+            },
 
-                connect() {
-                    this.connectionStatus = 'connecting';
-                    
-                    const wsUrl = `${WEBSOCKET_URL}/ws?eventId=${this.eventId}`;
-                    
-                    console.log('Connecting to:', wsUrl);
-                    this.ws = new WebSocket(wsUrl);
-                                        
-                    this.ws.onopen = () => {
-                        console.log('WebSocket connected');
-                        this.connectionStatus = 'connected';
-                    };
-                    
-                    this.ws.onmessage = (event) => {
-                        const data = JSON.parse(event.data);
-                        console.log('Received:', data);
+            getWebSocketURL() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host;
+                
+                const wsUrl = `${protocol}//${host}/ws?eventId=${this.eventId}`;
+                
+                console.log('Constructed WebSocket URL:', wsUrl);
+                return wsUrl;
+            },
 
-                        this.estimatedWaitTime = (data.estimatedWaitTime / 100) || this.estimatedWaitTime;
-                        this.positionInQueue = data.positionInQueue || this.positionInQueue;
-                        this.peopleAheadInQueue = data.peopleAheadInQueue || this.peopleAheadInQueue;
-                        this.totalPeopleInQueue = data.totalPeopleInQueue || this.totalPeopleInQueue;
-                       
-                        if (data.acceptedTokenId !== "") {
-                            localStorage.setItem('admission_token', data.acceptedTokenId);
-                            document.cookie = `admission_token=${data.acceptedTokenId}; path=/; max-age=3600`;
-                            window.location.href = `/choose-tickets?eventId=${this.eventId}`;
-                        }
-                    };
-                    
-                    this.ws.onerror = (error) => {
-                        console.error('WebSocket error:', error);
+            connect() {
+                this.connectionStatus = 'connecting';
+                
+                const wsUrl = this.getWebSocketURL();
+                
+                console.log('Connecting to:', wsUrl);
+                this.ws = new WebSocket(wsUrl);
+                                    
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.connectionStatus = 'connected';
+                };
+                
+                this.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    console.log('Received:', data);
+
+                    this.estimatedWaitTime = (data.estimatedWaitTime / 100) || this.estimatedWaitTime;
+                    this.positionInQueue = data.positionInQueue || this.positionInQueue;
+                    this.peopleAheadInQueue = data.peopleAheadInQueue || this.peopleAheadInQueue;
+                    this.totalPeopleInQueue = data.totalPeopleInQueue || this.totalPeopleInQueue;
+                   
+                    if (data.acceptedTokenId !== "") {
+                        localStorage.setItem('admission_token', data.acceptedTokenId);
+                        document.cookie = `admission_token=${data.acceptedTokenId}; path=/; max-age=3600`;
+                        window.location.href = `/choose-tickets?eventId=${this.eventId}`;
+                    }
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.connectionStatus = 'error';
+                };
+                
+                this.ws.onclose = () => {
+                    console.log('WebSocket closed');
+                    if (this.connectionStatus === 'connected') {
                         this.connectionStatus = 'error';
-                    };
-                    
-                    this.ws.onclose = () => {
-                        console.log('WebSocket closed');
-                        if (this.connectionStatus === 'connected') {
-                            this.connectionStatus = 'error';
-                        }
-                    };
-                },
-
-                reconnect() {
-                    if (this.ws) {
-                        this.ws.close();
                     }
-                    this.connect();
-                },
+                };
+            },
 
-                destroy() {
-                    if (this.ws) {
-                        this.ws.close();
-                    }
+            reconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+                this.connect();
+            },
+
+            destroy() {
+                if (this.ws) {
+                    this.ws.close();
                 }
             }
         }
+    }
 
-        window.addEventListener('beforeunload', () => {
-            const app = Alpine.$data(document.querySelector('[x-data]'));
-            if (app && app.destroy) {
-                app.destroy();
-            }
-        });
-    </script>
+    window.addEventListener('beforeunload', () => {
+        const app = Alpine.$data(document.querySelector('[x-data]'));
+        if (app && app.destroy) {
+            app.destroy();
+        }
+    });
+</script>
 </body>
 </html>

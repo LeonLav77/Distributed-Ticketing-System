@@ -12,10 +12,10 @@ import (
 
 func getPageData() PageData {
 	return PageData{
-		APIBaseURL:     os.Getenv("API_BASE_URL"),
+		APIBaseURL:     "/api",
 		AuthServiceURL: os.Getenv("AUTH_SERVICE_URL"),
 		DirectusAPIURL: os.Getenv("DIRECTUS_API_URL"),
-		WebsocketURL:   os.Getenv("WEBSOCKET_URL"),
+		WebsocketURL:   "/ws",
 	}
 }
 
@@ -23,19 +23,30 @@ func main() {
 	godotenv.Load()
 
 	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
+	ticketServiceURL := os.Getenv("TICKET_SERVICE_URL")
+	dataAggregatorURL := os.Getenv("DATA_AGGREGATOR_URL")
+	websocketServiceURL := os.Getenv("WEBSOCKET_SERVICE_URL")
 
 	staticFilesPath := os.Getenv("STATIC_FILES_PATH")
 	serverPort := os.Getenv("SERVER_PORT")
 
 	log.Printf("Configuration loaded:")
 	log.Printf("  Auth Service: %s", authServiceURL)
-	log.Printf("  API Base URL: %s", os.Getenv("API_BASE_URL"))
+	log.Printf("  Ticket Service: %s", ticketServiceURL)
+	log.Printf("  Data Aggregator: %s", dataAggregatorURL)
+	log.Printf("  WebSocket Service: %s", websocketServiceURL)
 	log.Printf("  Static Files: %s", staticFilesPath)
 	log.Printf("  Server Port: %s", serverPort)
 
-	// Auth endpoints
+	// API endpoints
 	http.HandleFunc("/api/login", handleLoginAPI(authServiceURL))
 	http.HandleFunc("/api/register", handleRegisterAPI(authServiceURL))
+	http.HandleFunc("/api/", handleAPIProxy(ticketServiceURL, dataAggregatorURL))
+	
+	// WebSocket proxy
+	http.HandleFunc("/ws", handleWebSocketProxy(websocketServiceURL))
+
+	// Auth pages
 	http.HandleFunc("/login", handleLoginPage(staticFilesPath))
 	http.HandleFunc("/register", handleRegisterPage(staticFilesPath))
 

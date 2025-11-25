@@ -6,16 +6,19 @@ services:
       - "8080:8080"
     environment:
       - SERVER_PORT=8080
-      - API_BASE_URL=http://api_service:8000
+      - TICKET_SERVICE_URL=http://ticket_purchase_service:8004
+      - DATA_AGGREGATOR_URL=http://api_service:8000
       - AUTH_SERVICE_URL=http://auth_service:8001
       - DIRECTUS_API_URL=https://directus.leon-home-lab.ddns.net
-      - WEBSOCKET_URL=ws://websocket_service:8002/ws
+      - WEBSOCKET_SERVICE_URL=http://websocket_service:8002
       - LOGIN_URL=/login
       - STATIC_FILES_PATH=static
+      - JWT_SECRET=kaodajemorskavila
     depends_on:
       - api_service
       - auth_service
       - websocket_service
+      - ticket_purchase_service
     restart: on-failure
     
   auth_service:
@@ -127,6 +130,7 @@ services:
     
   websocket_service:
     image: ghcr.io/leonlav77/websocket_service:latest
+    # NO ports exposed - only accessible through CDN proxy
     environment:
       - SERVER_PORT=8002
       - REDIS_ADDR=websocket_redis_service:6379
