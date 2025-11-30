@@ -149,9 +149,6 @@ func main() {
 	defer rabbitMQConn.Close()
 	defer rabbitMQChannel.Close()
 
-	paymentProcessorURL := getEnv("PAYMENT_PROCESSOR_URL", "http://localhost:12222")
-	log.Printf("Using payment processor at %s", paymentProcessorURL)
-
 	http.Handle("/reserve-tickets", withCORS(authenticateJWT(handleReserveTicketsAndRedirectToCheckout)))
 
 	http.Handle("/get-available-tickets", withCORS(http.HandlerFunc(handleGetAvailableTickets)))

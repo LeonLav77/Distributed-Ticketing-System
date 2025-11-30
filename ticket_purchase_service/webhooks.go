@@ -21,9 +21,8 @@ func handlePaymentSuccess(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to send RabbitMQ message: %v", err)
 	}
 
-	// Redirect to frontend
-	frontendURL := getEnv("FRONTEND_URL", "http://127.0.0.1:8080")
-	redirectURL := fmt.Sprintf("%s/order-finished", frontendURL)
+	publicFrontendURL := getEnv("PUBLIC_FRONTEND_URL", "http://localhost:8080")
+	redirectURL := fmt.Sprintf("%s/order-finished", publicFrontendURL)
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
@@ -42,8 +41,7 @@ func handlePaymentCancel(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to send RabbitMQ message: %v", err)
 	}
 
-	// Redirect to frontend
-	frontendURL := getEnv("FRONTEND_URL", "http://127.0.0.1:8080")
-	redirectURL := fmt.Sprintf("%s/order-finished", frontendURL)
+	publicFrontendURL := getEnv("PUBLIC_FRONTEND_URL", "http://localhost:8080")
+	redirectURL := fmt.Sprintf("%s/order-finished", publicFrontendURL)
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }

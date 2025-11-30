@@ -89,12 +89,6 @@ services:
         condition: service_healthy
     restart: on-failure
     
-  payment_processor_service:
-    image: ghcr.io/leonlav77/payment_processor_service:latest
-    environment:
-      - SERVER_PORT=8003
-    restart: on-failure
-    
   ticket_purchase_service:
     image: ghcr.io/leonlav77/ticket_purchase_service:latest
     environment:
@@ -105,14 +99,18 @@ services:
       - ETCD_DIAL_TIMEOUT=5s
       - REDIS_ADDR=tickets_redis_service:6379
       - RABBITMQ_URL=amqp://admin:kaodajemorskavila@rabbitmq_service:5672/
-      - PAYMENT_PROCESSOR_URL=http://payment_processor_service:8003
+      - PAYMENT_PROCESSOR_URL=https://payment-processor.leon-home-lab.ddns.net
       - FRONTEND_URL=http://cdn_service:8080
+      - PUBLIC_FRONTEND_URL=http://127.0.0.1:8080
       - JWT_SECRET=kaodajemorskavila
       - LOGIN_URL=/login
       - REDIS_CACHE_TTL=10s
       - RESERVATION_TIMEOUT=15m
       - MAX_RETRIES=10
       - RETRY_DELAY=10ms
+      - CALLBACK_BASE_URL=http://127.0.0.1:10000
+    ports:
+      - "10000:8004"
     depends_on:
       etcd_service_1:
         condition: service_started
@@ -121,8 +119,6 @@ services:
       etcd_service_3:
         condition: service_started
       tickets_redis_service:
-        condition: service_started
-      payment_processor_service:
         condition: service_started
       rabbitmq_service:
         condition: service_healthy
