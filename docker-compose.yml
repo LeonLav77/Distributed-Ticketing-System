@@ -242,6 +242,18 @@ services:
     volumes:
       - etcd3_data:/etcd-data
 
+# Queue Control Service (for testing/monitoring)
+  queue_control_service:
+    image: ghcr.io/leonlav77/queue_control_service:latest
+    ports:
+      - "9000:9000"
+    environment:
+      - SERVER_PORT=9000
+      - REDIS_ADDR=websocket_redis_service:6379
+    depends_on:
+      - websocket_redis_service
+    restart: on-failure
+
 volumes:
   auth_db_data:
   rabbitmq_data:
