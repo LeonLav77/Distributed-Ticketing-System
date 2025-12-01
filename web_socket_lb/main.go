@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
@@ -27,6 +29,8 @@ func (lb *LoadBalancer) nextBackend() string {
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
 }
 
 func (lb *LoadBalancer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -41,9 +45,21 @@ func (lb *LoadBalancer) HandleWebSocket(w http.ResponseWriter, r *http.Request) 
 		backendURL += "?" + r.URL.RawQuery
 	}
 
-	backendConn, _, err := websocket.DefaultDialer.Dial(backendURL, nil)
+	log.Printf("Routing to backend: %s", backendURL)
+
+	headers := http.Header{}
+	for key, values := range r.Header {
+		if key == "Cookie" || key == "Authorization" || key == "User-Agent" {
+			for _, value := range values {
+				headers.Add(key, value)
+			}
+		}
+	}
+
+	dialer := websocket.DefaultDialer
+	backendConn, _, err := dialer.Dial(backendURL, headers)
 	if err != nil {
-		log.Printf("Failed to connect to backend: %v", err)
+		log.Printf("Failed to connect to backend %s: %v", backendURL, err)
 		clientConn.Close()
 		return
 	}
@@ -80,16 +96,37 @@ func proxyWebSocket(src *websocket.Conn, dst *websocket.Conn, done chan struct{}
 	}
 }
 
+func getBackends() []string {
+	backendsStr := os.Getenv("BACKENDS")
+	if backendsStr == "" {
+		return []string{}
+	}
+	
+	backends := strings.Split(backendsStr, ",")
+	for i := range backends {
+		backends[i] = strings.TrimSpace(backends[i])
+	}
+	
+	return backends
+}
+
 func main() {
-	backends := []string{
-		"ws://192.168.1.74:12000",
-		"ws://192.168.1.74:12001",
-		"ws://192.168.1.74:12002",
+	backends := getBackends()
+	
+	if len(backends) == 0 {
+		log.Fatal("No backends configured. Set BACKENDS (comma-separated) environment variable")
+	}
+	
+	log.Printf("Configured %d backends:", len(backends))
+	for i, backend := range backends {
+		log.Printf("  [%d] %s", i+1, backend)
 	}
 
 	lb := NewLoadBalancer(backends)
 	http.HandleFunc("/ws", lb.HandleWebSocket)
 
-	log.Println("WebSocket Load Balancer starting on :4321")
-	log.Fatal(http.ListenAndServe(":4321", nil))
+	port := os.Getenv("LB_PORT")
+
+	log.Printf("WebSocket Load Balancer starting on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

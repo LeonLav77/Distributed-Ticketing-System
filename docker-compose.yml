@@ -10,14 +10,14 @@ services:
       - DATA_AGGREGATOR_URL=http://api_service:8000
       - AUTH_SERVICE_URL=http://auth_service:8001
       - DIRECTUS_API_URL=https://directus.leon-home-lab.ddns.net
-      - WEBSOCKET_SERVICE_URL=http://websocket_service:8002
+      - WEBSOCKET_SERVICE_URL=http://web_socket_lb:4321
       - LOGIN_URL=/login
       - STATIC_FILES_PATH=static
       - JWT_SECRET=kaodajemorskavila
     depends_on:
       - api_service
       - auth_service
-      - websocket_service
+      - web_socket_lb
       - ticket_purchase_service
     restart: on-failure
     
@@ -124,9 +124,43 @@ services:
         condition: service_healthy
     restart: on-failure
     
-  websocket_service:
+  web_socket_lb:
+    image: ghcr.io/leonlav77/web_socket_lb:latest
+    environment:
+      - LB_PORT=4321
+      - BACKENDS=ws://websocket_service_1:8002,ws://websocket_service_2:8002,ws://websocket_service_3:8002
+    depends_on:
+      - websocket_service_1
+      - websocket_service_2
+      - websocket_service_3
+    restart: on-failure
+
+  websocket_service_1:
     image: ghcr.io/leonlav77/websocket_service:latest
-    # NO ports exposed - only accessible through CDN proxy
+    environment:
+      - SERVER_PORT=8002
+      - REDIS_ADDR=websocket_redis_service:6379
+      - WEBSOCKET_UPDATE_TIME_MS=2000
+      - JWT_SECRET=kaodajemorskavila
+      - LOGIN_URL=/login
+    depends_on:
+      - websocket_redis_service
+    restart: on-failure
+
+  websocket_service_2:
+    image: ghcr.io/leonlav77/websocket_service:latest
+    environment:
+      - SERVER_PORT=8002
+      - REDIS_ADDR=websocket_redis_service:6379
+      - WEBSOCKET_UPDATE_TIME_MS=2000
+      - JWT_SECRET=kaodajemorskavila
+      - LOGIN_URL=/login
+    depends_on:
+      - websocket_redis_service
+    restart: on-failure
+
+  websocket_service_3:
+    image: ghcr.io/leonlav77/websocket_service:latest
     environment:
       - SERVER_PORT=8002
       - REDIS_ADDR=websocket_redis_service:6379
