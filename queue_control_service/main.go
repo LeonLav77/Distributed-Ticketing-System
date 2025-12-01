@@ -111,7 +111,7 @@ func removeConnections(eventID string, count int) error {
 	}
 
 	// Convert to interfaces for ZRem
-	toRemove := make([]interface{}, len(members))
+	toRemove := make([]any, len(members))
 	for i, member := range members {
 		toRemove[i] = member
 	}
@@ -232,20 +232,17 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			state, err := getQueueState(eventID)
-			if err != nil {
-				log.Printf("Error getting queue state: %v", err)
-				return
-			}
+    for range ticker.C {
+        state, err := getQueueState(eventID)
+        if err != nil {
+            log.Printf("Error getting queue state: %v", err)
+            return
+        }
 
-			if err := conn.WriteJSON(state); err != nil {
-				return
-			}
-		}
-	}
+        if err := conn.WriteJSON(state); err != nil {
+            return
+        }
+    }
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
