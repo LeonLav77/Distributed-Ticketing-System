@@ -60,7 +60,7 @@
                                             Only <span x-text="ticket.quantity"></span> left
                                         </span>
                                     </div>
-                                    <p class="text-2xl font-bold text-gray-900">$100.00</p>
+                                    <p class="text-2xl font-bold text-gray-900">$50.00</p>
                                     <p class="text-sm text-gray-500 mt-1">
                                         <span x-text="ticket.quantity"></span> available
                                     </p>
@@ -109,7 +109,7 @@
                         <span class="text-gray-600">
                             <span x-text="selectedQuantity"></span>x <span class="capitalize" x-text="formatTicketType(selectedTicketType)"></span>
                         </span>
-                        <span class="font-medium text-gray-900" x-text="'$' + (selectedQuantity * 100).toFixed(2)"></span>
+                        <span class="font-medium text-gray-900" x-text="'$' + (selectedQuantity * 50).toFixed(2)"></span>
                     </div>
                     
                     <div x-show="!selectedTicketType" class="text-sm text-gray-500 italic">
@@ -168,7 +168,7 @@
             eventId: new URLSearchParams(window.location.search).get('eventId'),
 
             get totalPrice() {
-                return this.selectedQuantity * 100;
+                return this.selectedQuantity * 50;
             },
 
             init() {

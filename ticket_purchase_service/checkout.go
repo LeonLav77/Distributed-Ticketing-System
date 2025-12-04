@@ -18,7 +18,7 @@ func createCheckoutSession(orderReferenceId string, requestData ReserveTicketsRe
 			{
 				Name:        fmt.Sprintf("%s Ticket - Event %s", requestData.TicketType, requestData.EventId),
 				Description: fmt.Sprintf("%s tier ticket", requestData.TicketType),
-				Amount:      int64(requestData.Quantity) * 5000,
+				Amount:      int64(5000),
 				Currency:    "usd",
 				Quantity:    int64(requestData.Quantity),
 			},
