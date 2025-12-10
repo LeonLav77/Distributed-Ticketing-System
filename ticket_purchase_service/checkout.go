@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
 func createCheckoutSession(orderReferenceId string, requestData ReserveTicketsRequest) (string, error) {
-	callbackBaseURL := getEnv("CALLBACK_BASE_URL", "http://127.0.0.1:10000")
+	callbackBaseURL := os.Getenv("CALLBACK_BASE_URL")
 	successURL := fmt.Sprintf("%s/webhooks/payment-success?order_reference_id=%s", callbackBaseURL, orderReferenceId)
 	cancelURL := fmt.Sprintf("%s/webhooks/payment-cancel?order_reference_id=%s", callbackBaseURL, orderReferenceId)
 
@@ -32,7 +33,7 @@ func createCheckoutSession(orderReferenceId string, requestData ReserveTicketsRe
 		return "", err
 	}
 
-	paymentProcessorURL := getEnv("PAYMENT_PROCESSOR_URL", "http://192.168.1.74:12222")
+	paymentProcessorURL := os.Getenv("PAYMENT_PROCESSOR_URL")
 	checkoutEndpoint := fmt.Sprintf("%s/v1/checkout/sessions", paymentProcessorURL)
 
 	resp, err := http.Post(

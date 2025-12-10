@@ -1,5 +1,7 @@
 package main
 
+import "github.com/golang-jwt/jwt/v5"
+
 type TicketAvailabilityResponse struct {
 	EventId          string                    `json:"eventId"`
 	AvailableTickets []TicketAvailabilityEntry `json:"availableTickets"`
@@ -22,7 +24,6 @@ type TicketReservationResponse struct {
 	CheckoutURL string `json:"checkoutUrl,omitempty"`
 }
 
-// Mock Payment API structures
 type MockLineItem struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -42,4 +43,20 @@ type MockCheckoutResponse struct {
 	ID     string `json:"id"`
 	URL    string `json:"url"`
 	Status string `json:"status"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+type AdmissionsClaims struct {
+	EventID string `json:"event_id"`
+	UserID  int    `json:"user_id"`
+	jwt.RegisteredClaims
+}
+
+type UserClaims struct {
+	Username string `json:"username"`
+	UserID   int    `json:"user_id"`
+	jwt.RegisteredClaims
 }

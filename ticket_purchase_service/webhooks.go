@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
 func handlePaymentSuccess(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,7 @@ func handlePaymentSuccess(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to send RabbitMQ message: %v", err)
 	}
 
-	publicFrontendURL := getEnv("PUBLIC_FRONTEND_URL", "http://localhost:8080")
+	publicFrontendURL := os.Getenv("PUBLIC_FRONTEND_URL")
 	redirectURL := fmt.Sprintf("%s/order-finished", publicFrontendURL)
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
@@ -41,7 +42,7 @@ func handlePaymentCancel(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to send RabbitMQ message: %v", err)
 	}
 
-	publicFrontendURL := getEnv("PUBLIC_FRONTEND_URL", "http://localhost:8080")
+	publicFrontendURL := os.Getenv("PUBLIC_FRONTEND_URL")
 	redirectURL := fmt.Sprintf("%s/order-finished", publicFrontendURL)
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }

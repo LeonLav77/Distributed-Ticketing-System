@@ -1,9 +1,6 @@
 package main
 
 import (
-	"database/sql"
-	"errors"
-
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -28,9 +25,3 @@ type LoginResponse struct {
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
-
-var (
-	db        *sql.DB
-)
-
-var ErrUserNotFound = errors.New("user not found")

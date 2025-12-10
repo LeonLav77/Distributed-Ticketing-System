@@ -1,7 +1,9 @@
 package main
 
 import (
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -64,36 +66,17 @@ func (lb *LoadBalancer) HandleWebSocket(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	done := make(chan struct{})
+	clientTCP := clientConn.UnderlyingConn()
+	backendTCP := backendConn.UnderlyingConn()
 
-	// Proxy backend to client
-	go proxyWebSocket(clientConn, backendConn, done)
-	// Proxy client to backend
-	go proxyWebSocket(backendConn, clientConn, done)
-
-	<-done
-
-	clientConn.Close()
-	backendConn.Close()
+	go forwardMessage(clientTCP, backendTCP)
+	forwardMessage(backendTCP, clientTCP)	
 }
 
-func proxyWebSocket(src *websocket.Conn, dst *websocket.Conn, done chan struct{}) {
-	defer func() {
-		select {
-		case done <- struct{}{}:
-		default:
-		}
-	}()
-
-	for {
-		messageType, message, err := src.ReadMessage()
-		if err != nil {
-			return
-		}
-		if err := dst.WriteMessage(messageType, message); err != nil {
-			return
-		}
-	}
+func forwardMessage(destination net.Conn, source net.Conn) {
+	io.Copy(destination, source)
+	destination.Close()
+	source.Close()
 }
 
 func getBackends() []string {

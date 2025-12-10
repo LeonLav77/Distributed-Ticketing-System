@@ -16,12 +16,17 @@ import (
 
 var (
 	db *sql.DB
+	directusURL   string
+	directusToken string
 )
 
 func main() {
 	godotenv.Load()
 
 	initDB()
+	directusURL = os.Getenv("DIRECTUS_API_URL")
+	directusToken = os.Getenv("DIRECTUS_TOKEN")
+
 
 	http.Handle("/profile", withCORS(http.HandlerFunc(getUserProfile)))
 
@@ -152,9 +157,6 @@ func getTicketsForOrder(orderID int) ([]Ticket, error) {
 }
 
 func getEventFromDirectus(eventID string) (Event, error) {
-	directusURL := os.Getenv("DIRECTUS_API_URL")
-	directusToken := os.Getenv("DIRECTUS_TOKEN")
-
 	url := fmt.Sprintf("%s/items/concerts/%s?fields=display_image,venue.venues_id.Name,performer.performers_id.Name", directusURL, eventID)
 
 	req, err := http.NewRequest("GET", url, nil)

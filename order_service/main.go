@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -13,49 +14,44 @@ import (
 	"github.com/streadway/amqp"
 )
 
-type OrderCreatedMessage struct {
-	EventID          string `json:"event_id"`
-	TicketType       string `json:"ticket_type"`
-	Quantity         int    `json:"quantity"`
-	UserID           int    `json:"user_id"`
-	OrderReferenceId string `json:"order_reference_id"`
-}
-
-type OrderPaymentSuccessMessage struct {
-	OrderReferenceId string `json:"order_reference_id"`
-}
-
-type TicketData struct {
-	SeatNumber string
-	Price      float64
-}
-
 var (
 	db *sql.DB
 )
 
+func setupDatabase() error {
+	dbHost := os.Getenv("DB_HOST")
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+	dbPort := os.Getenv("DB_PORT")
+	dbSSLMode := os.Getenv("DB_SSLMODE")
+
+	log.Printf("Connecting to DB: host=%s port=%s user=%s dbname=%s sslmode=%s", 
+		dbHost, dbPort, dbUser, dbName, dbSSLMode)
+
+	connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", 
+		dbHost, dbPort, dbUser, dbPassword, dbName, dbSSLMode)
+
+	var err error
+	db, err = sql.Open("postgres", connectionString)
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	err = db.Ping()
+	if err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
+
+	return err
+}
+
 func main() {
 	godotenv.Load()
 
-	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_SSLMODE"),
-	)
-
-	log.Printf("Connecting to PostgreSQL at %s:%s...",
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-	)
-
-	var err error
-	db, err = sql.Open("postgres", connStr)
+	err := setupDatabase()
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		log.Fatal("Database setup failed:", err)
 	}
 	defer db.Close()
 
@@ -109,9 +105,9 @@ func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery) {
 		log.Printf("📝 Received order created: %s\n", string(message.Body))
 
 		data := OrderCreatedMessage{}
-		err := json.Unmarshal(message.Body, &data)
+		err := json.NewDecoder(bytes.NewReader(message.Body)).Decode(&data)
 		if err != nil {
-			log.Printf("Failed to unmarshal message: %v\n", err)
+			log.Printf("Failed to decode message: %v\n", err)
 			message.Nack(false, false)
 			continue
 		}
@@ -182,9 +178,9 @@ func handleOrderSuccessMessages(orderSuccessMessages <-chan amqp.Delivery) {
 		log.Printf("📩 Received order payment success: %s\n", string(message.Body))
 
 		data := OrderPaymentSuccessMessage{}
-		err := json.Unmarshal(message.Body, &data)
+		err := json.NewDecoder(bytes.NewReader(message.Body)).Decode(&data)
 		if err != nil {
-			log.Printf("Failed to unmarshal message: %v\n", err)
+			log.Printf("Failed to decode message: %v\n", err)
 			message.Nack(false, false)
 			continue
 		}
@@ -204,7 +200,6 @@ func handleOrderSuccessMessages(orderSuccessMessages <-chan amqp.Delivery) {
 		message.Ack(false)
 	}
 }
-
 
 func generateTicketData() TicketData {
 	price := 50.0

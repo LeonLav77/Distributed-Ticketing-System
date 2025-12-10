@@ -8,22 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-type AdmissionsClaims struct {
-	EventID string `json:"event_id"`
-	UserID  int    `json:"user_id"`
-	jwt.RegisteredClaims
-}
-
-type UserClaims struct {
-	Username string `json:"username"`
-	UserID   int    `json:"user_id"`
-	jwt.RegisteredClaims
-}
-
 func getJWTSecret() []byte {
 	secret := os.Getenv("JWT_SECRET")
 	return []byte(secret)
@@ -33,7 +17,6 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var tokenString string
 
-		// Try to get token from Authorization header first (for API calls)
 		authHeader := r.Header.Get("Authorization")
 		if authHeader != "" {
 			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
@@ -41,7 +24,6 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		// If not in header, try cookie (for page loads)
 		if tokenString == "" {
 			cookie, err := r.Cookie("auth_token")
 			if err == nil {
@@ -49,7 +31,6 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		// If still no token, redirect to login
 		if tokenString == "" {
 			loginURL := os.Getenv("LOGIN_URL")
 			if loginURL == "" {

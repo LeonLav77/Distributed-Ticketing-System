@@ -21,27 +21,8 @@ var (
 	}
 )
 
-type QueueState struct {
-	EventID      string   `json:"eventId"`
-	TotalInQueue int      `json:"totalInQueue"`
-	UserIDs      []string `json:"userIds"`
-}
-
-type AddConnectionsRequest struct {
-	EventID string `json:"eventId"`
-	Count   int    `json:"count"`
-}
-
-type RemoveConnectionsRequest struct {
-	EventID string `json:"eventId"`
-	Count   int    `json:"count"`
-}
-
 func initRedis() {
 	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "websocket_redis_service:6379"
-	}
 
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
@@ -100,7 +81,6 @@ func addConnections(eventID string, count int) error {
 func removeConnections(eventID string, count int) error {
 	queueKey := "ws-queue:" + eventID
 
-	// Remove the first N members (lowest score = earliest in queue)
 	members, err := rdb.ZRange(ctx, queueKey, 0, int64(count-1)).Result()
 	if err != nil {
 		return err
@@ -110,7 +90,6 @@ func removeConnections(eventID string, count int) error {
 		return nil
 	}
 
-	// Convert to interfaces for ZRem
 	toRemove := make([]any, len(members))
 	for i, member := range members {
 		toRemove[i] = member

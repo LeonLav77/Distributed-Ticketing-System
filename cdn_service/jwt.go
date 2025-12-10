@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 
@@ -17,7 +16,6 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var tokenString string
 
-		// Try to get token from Authorization header first (for API calls)
 		authHeader := r.Header.Get("Authorization")
 		if authHeader != "" {
 			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
@@ -25,7 +23,6 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		// If not in header, try cookie (for page loads)
 		if tokenString == "" {
 			cookie, err := r.Cookie("auth_token")
 			if err == nil {
@@ -33,7 +30,6 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		// If still no token, redirect to login
 		if tokenString == "" {
 			loginURL := os.Getenv("LOGIN_URL")
 			http.Redirect(w, r, loginURL, http.StatusSeeOther)
@@ -53,15 +49,4 @@ func authenticateJWT(next http.HandlerFunc) http.HandlerFunc {
 
 		next.ServeHTTP(w, r)
 	}
-}
-
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, ErrorResponse{Error: message})
-}
-
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, _ := json.Marshal(payload)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(response)
 }

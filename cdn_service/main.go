@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
@@ -19,127 +20,73 @@ func getPageData() PageData {
 	}
 }
 
+func renderPage(filename string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filePath := filepath.Join(staticFilesPath, filename)
+		tmpl, err := template.ParseFiles(filePath)
+		if err != nil {
+			http.Error(w, "Template error", http.StatusInternalServerError)
+			return
+		}
+		tmpl.Execute(w, getPageData())
+	}
+}
+
+var (
+	staticFilesPath string
+	authServiceURL  string
+	ticketServiceURL string
+	dataAggregatorURL string
+	websocketServiceURL string
+)
+
 func main() {
 	godotenv.Load()
 
-	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
-	ticketServiceURL := os.Getenv("TICKET_SERVICE_URL")
-	dataAggregatorURL := os.Getenv("DATA_AGGREGATOR_URL")
-	websocketServiceURL := os.Getenv("WEBSOCKET_SERVICE_URL")
-
-	staticFilesPath := os.Getenv("STATIC_FILES_PATH")
+	authServiceURL = os.Getenv("AUTH_SERVICE_URL")
+	ticketServiceURL = os.Getenv("TICKET_SERVICE_URL")
+	dataAggregatorURL = os.Getenv("DATA_AGGREGATOR_URL")
+	websocketServiceURL = os.Getenv("WEBSOCKET_SERVICE_URL")
+	staticFilesPath = os.Getenv("STATIC_FILES_PATH")
 	serverPort := os.Getenv("SERVER_PORT")
 
-	log.Printf("Configuration loaded:")
-	log.Printf("  Auth Service: %s", authServiceURL)
-	log.Printf("  Ticket Service: %s", ticketServiceURL)
-	log.Printf("  Data Aggregator: %s", dataAggregatorURL)
-	log.Printf("  WebSocket Service: %s", websocketServiceURL)
-	log.Printf("  Static Files: %s", staticFilesPath)
-	log.Printf("  Server Port: %s", serverPort)
-
 	// API endpoints
-	http.HandleFunc("/api/login", handleLoginAPI(authServiceURL))
-	http.HandleFunc("/api/register", handleRegisterAPI(authServiceURL))
-	http.HandleFunc("/api/", handleAPIProxy(ticketServiceURL, dataAggregatorURL))
-	
-	// WebSocket proxy
-	http.HandleFunc("/ws", handleWebSocketProxy(websocketServiceURL))
+	http.HandleFunc("/api/login", handleLoginAPI)
+	http.HandleFunc("/api/register", handleRegisterAPI)
+	http.HandleFunc("/api/get-available-tickets", handleGetAvailableTickets)
+	http.HandleFunc("/api/reserve-tickets", handleReserveTickets)
+	http.HandleFunc("/api/webhooks/", handleWebhook)
+	http.HandleFunc("/api/profile", handleProfile)
+	http.HandleFunc("/ws", handleWebSocketProxy)
 
 	// Auth pages
-	http.HandleFunc("/login", handleLoginPage(staticFilesPath))
-	http.HandleFunc("/register", handleRegisterPage(staticFilesPath))
+	http.HandleFunc("/login", renderPage("login.html"))
+	http.HandleFunc("/register", renderPage("register.html"))
 
 	// Protected routes
-	http.HandleFunc("/queue", authenticateJWT(handleQueue(staticFilesPath)))
-	http.HandleFunc("/profile", authenticateJWT(handleProfile(staticFilesPath)))
-	http.HandleFunc("/choose-tickets", authenticateJWT(handleChooseTickets(staticFilesPath)))
-
-	// Public routes
-	http.HandleFunc("/", handleIndex(staticFilesPath))
-
-	log.Printf("🚀 Frontend server starting on port %s...", serverPort)
-	log.Fatal(http.ListenAndServe(":"+serverPort, nil))
-}
-
-func handleLoginPage(staticFilesPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		filePath := filepath.Join(staticFilesPath, "login.html")
-		template, err := template.ParseFiles(filePath)
-
-		if err != nil {
-			http.Error(w, "Template error", http.StatusInternalServerError)
-			return
-		}
-		template.Execute(w, getPageData())
-	}
-}
-
-func handleRegisterPage(staticFilesPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		filePath := filepath.Join(staticFilesPath, "register.html")
-		template, err := template.ParseFiles(filePath)
-
-		if err != nil {
-			http.Error(w, "Template error", http.StatusInternalServerError)
-			return
-		}
-		template.Execute(w, getPageData())
-	}
-}
-
-func handleQueue(staticFilesPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		eventId := r.URL.Query().Get("event_id")
-		if eventId == "" {
+	http.HandleFunc("/queue", authenticateJWT(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("event_id") == "" {
 			http.Error(w, "event_id parameter is required", http.StatusBadRequest)
 			return
 		}
-		filePath := filepath.Join(staticFilesPath, "queue.html")
-		tmpl, err := template.ParseFiles(filePath)
-		if err != nil {
-			http.Error(w, "Template error", http.StatusInternalServerError)
-			return
-		}
-		tmpl.Execute(w, getPageData())
-	}
+		renderPage("queue.html")(w, r)
+	}))
+	http.HandleFunc("/profile", authenticateJWT(renderPage("profile.html")))
+	http.HandleFunc("/choose-tickets", authenticateJWT(renderPage("choose-tickets.html")))
+
+	// Public routes
+	http.HandleFunc("/", renderPage("index.html"))
+
+	log.Fatal(http.ListenAndServe(":"+serverPort, nil))
 }
 
-func handleProfile(staticFilesPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		filePath := filepath.Join(staticFilesPath, "profile.html")
-		tmpl, err := template.ParseFiles(filePath)
-		
-		if err != nil {
-			http.Error(w, "Template error", http.StatusInternalServerError)
-			return
-		}
-		tmpl.Execute(w, getPageData())
-	}
+func respondWithError(w http.ResponseWriter, code int, message string) {
+	respondWithJSON(w, code, ErrorResponse{Error: message})
 }
 
-func handleChooseTickets(staticFilesPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		filePath := filepath.Join(staticFilesPath, "choose-tickets.html")
-		tmpl, err := template.ParseFiles(filePath)
-
-		if err != nil {
-			http.Error(w, "Template error", http.StatusInternalServerError)
-			return
-		}
-		tmpl.Execute(w, getPageData())
-	}
-}
-
-func handleIndex(staticFilesPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		filePath := filepath.Join(staticFilesPath, "index.html")
-		tmpl, err := template.ParseFiles(filePath)
-
-		if err != nil {
-			http.Error(w, "Template error", http.StatusInternalServerError)
-			return
-		}
-		tmpl.Execute(w, getPageData())
-	}
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	response, _ := json.Marshal(payload)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(response)
 }

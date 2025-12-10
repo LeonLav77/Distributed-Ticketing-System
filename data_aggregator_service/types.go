@@ -1,5 +1,7 @@
 package main
 
+import "github.com/golang-jwt/jwt/v5"
+
 type Order struct {
 	ID               int      `json:"id"`
 	EventID          string   `json:"event_id"`
@@ -37,4 +39,14 @@ type DirectusEvent struct {
 			} `json:"performers_id"`
 		} `json:"performer"`
 	} `json:"data"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+type UserClaims struct {
+	Username string `json:"username"`
+	UserID   int    `json:"user_id"`
+	jwt.RegisteredClaims
 }

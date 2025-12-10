@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -17,37 +18,52 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var (
+	db        *sql.DB
+)
+
+var ErrUserNotFound = errors.New("user not found")
+
+
 func getJWTSecret() []byte {
 	secret := os.Getenv("JWT_SECRET")
 	return []byte(secret)
 }
 
+func setupDatabase() error {
+	dbHost := os.Getenv("DB_HOST")
+		dbUser := os.Getenv("DB_USER")
+		dbPassword := os.Getenv("DB_PASSWORD")
+		dbName := os.Getenv("DB_NAME")
+		dbPort := os.Getenv("DB_PORT")
+
+		log.Printf("Connecting to DB: host=%s port=%s user=%s dbname=%s", dbHost, dbPort, dbUser, dbName)
+
+		connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName)
+
+		var err error
+		db, err = sql.Open("postgres", connectionString)
+		if err != nil {
+			log.Fatal("Failed to connect to database:", err)
+		}
+
+		// Test the connection
+		err = db.Ping()
+		if err != nil {
+			log.Fatal("Failed to ping database:", err)
+		}
+
+		return err
+}
+
 func main() {
 	godotenv.Load()
 
-	dbHost := os.Getenv("DB_HOST")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	dbPort := os.Getenv("DB_PORT")
-
-	log.Printf("Connecting to DB: host=%s port=%s user=%s dbname=%s", dbHost, dbPort, dbUser, dbName)
-
-	connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName)
-
-	var err error
-	db, err = sql.Open("postgres", connectionString)
+	err := setupDatabase()
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		log.Fatal("Database setup failed:", err)
 	}
 
-	// Test the connection
-	err = db.Ping()
-	if err != nil {
-		log.Fatal("Failed to ping database:", err)
-	}
-
-	log.Println("Successfully connected to database!")
 	defer db.Close()
 
 	http.HandleFunc("/register", handleRegister)
@@ -82,20 +98,18 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hash password
 	hashedPassword, salt, err := generateHashedPassword(user.Password)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to hash password")
 		return
 	}
 
-	// Insert user into database
 	userID, err := insertUserInDatabase(user.Username, hashedPassword, salt)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	log.Printf("User registered successfully: %d\n", userID)
+	
 	respondWithJSON(w, http.StatusCreated, map[string]any{
 		"message": "User registered successfully",
 		"user_id": userID,

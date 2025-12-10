@@ -20,41 +20,23 @@ import (
 )
 
 var (
+	ctx      = context.Background()
 	etcdClient      *clientv3.Client
-	redisClient     *redis.Client
+	rdb             *redis.Client
 	rabbitMQConn    *amqp.Connection
 	rabbitMQChannel *amqp.Channel
 )
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		port = "unknown"
-	}
-	fmt.Fprintf(w, "Hello, World From Go on port %s!", port)
-}
-
-func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "OK")
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
 
 func initEtcd() {
 	var err error
 
 	endpoints := []string{
-		getEnv("ETCD_ENDPOINT_1", "localhost:2379"),
-		getEnv("ETCD_ENDPOINT_2", "localhost:2479"),
-		getEnv("ETCD_ENDPOINT_3", "localhost:2579"),
+		os.Getenv("ETCD_ENDPOINT_1"),
+		os.Getenv("ETCD_ENDPOINT_2"),
+		os.Getenv("ETCD_ENDPOINT_3"),
 	}
 
-	dialTimeout := getEnv("ETCD_DIAL_TIMEOUT", "5s")
+	dialTimeout := os.Getenv("ETCD_DIAL_TIMEOUT")
 	duration, err := time.ParseDuration(dialTimeout)
 	if err != nil {
 		duration = 5 * time.Second
@@ -72,25 +54,24 @@ func initEtcd() {
 }
 
 func initRedis() {
-	redisAddr := getEnv("REDIS_ADDR", "localhost:6379")
+	redisAddr := os.Getenv("REDIS_ADDR")
 
-	redisClient = redis.NewClient(&redis.Options{
-		Addr: redisAddr,
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: "",
+		DB:       0,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Failed to connect to Redis at %s: %v", redisAddr, err)
+	_, err := rdb.Ping(ctx).Result()
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
-
-	log.Printf("Connected to Redis at: %s", redisAddr)
+	log.Println("Connected to Redis")
 }
 
 func withCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		corsOrigin := getEnv("CORS_ALLOWED_ORIGIN", "http://127.0.0.1:8080")
+		corsOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
 
 		w.Header().Set("Access-Control-Allow-Origin", corsOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -108,7 +89,7 @@ func withCORS(h http.Handler) http.Handler {
 func initRabbitMQ() {
 	var err error
 
-	rabbitMQURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	rabbitMQURL := os.Getenv("RABBITMQ_URL")
 
 	rabbitMQConn, err = amqp.Dial(rabbitMQURL)
 	if err != nil {
@@ -131,16 +112,14 @@ func sendRabbitMQMessage(queueName string, messageBody []byte) error {
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: No .env file found, using system environment variables")
-	}
+	godotenv.Load()
 
 	log.Printf("Configuration loaded:")
-	log.Printf("  REDIS_ADDR: %s", getEnv("REDIS_ADDR", "localhost:6379"))
-	log.Printf("  SERVER_PORT: %s", getEnv("SERVER_PORT", "10000"))
+	log.Printf("  REDIS_ADDR: %s", os.Getenv("REDIS_ADDR"))
+	log.Printf("  SERVER_PORT: %s", os.Getenv("SERVER_PORT"))
 
 	initRedis()
-	defer redisClient.Close()
+	defer rdb.Close()
 
 	initEtcd()
 	defer etcdClient.Close()
@@ -152,12 +131,10 @@ func main() {
 	http.Handle("/reserve-tickets", withCORS(authenticateJWT(handleReserveTicketsAndRedirectToCheckout)))
 
 	http.Handle("/get-available-tickets", withCORS(http.HandlerFunc(handleGetAvailableTickets)))
-	http.Handle("/health-check", withCORS(http.HandlerFunc(healthCheckHandler)))
 	http.Handle("/webhooks/payment-success", withCORS(http.HandlerFunc(handlePaymentSuccess)))
 	http.Handle("/webhooks/payment-cancel", withCORS(http.HandlerFunc(handlePaymentCancel)))
-	http.Handle("/", withCORS(http.HandlerFunc(handler)))
 
-	serverPort := getEnv("SERVER_PORT", "10000")
+	serverPort := os.Getenv("SERVER_PORT")
 	fmt.Printf("Server starting on port %s...\n", serverPort)
 	log.Fatal(http.ListenAndServe(":"+serverPort, nil))
 }
@@ -222,7 +199,7 @@ func handleGetAvailableTickets(w http.ResponseWriter, r *http.Request) {
 	ticketType := "basic"
 	key := fmt.Sprintf("event:%s:available_tickets:%s", eventId, ticketType)
 
-	availableBasicTickets, err := redisClient.Get(r.Context(), key).Result()
+	availableBasicTickets, err := rdb.Get(r.Context(), key).Result()
 
 	var quantity int
 	if err == redis.Nil || err != nil {
@@ -255,19 +232,17 @@ func handleGetAvailableTickets(w http.ResponseWriter, r *http.Request) {
 
 func storeAvailableTicketsInRedis(eventId string, ticketType string, quantity int) error {
 	key := fmt.Sprintf("event:%s:available_tickets:%s", eventId, ticketType)
-	ctx := context.Background()
 
-	cacheTTL := getEnv("REDIS_CACHE_TTL", "10s")
+	cacheTTL := os.Getenv("REDIS_CACHE_TTL")
 	duration, err := time.ParseDuration(cacheTTL)
 	if err != nil {
 		duration = 10 * time.Second
 	}
 
-	return redisClient.Set(ctx, key, quantity, duration).Err()
+	return rdb.Set(ctx, key, quantity, duration).Err()
 }
 
 func getAvailableTicketsFromEtcd(eventId string, tier string) (int, error) {
-	ctx := context.Background()
 	key := fmt.Sprintf("concert:%s:available:%s", eventId, tier)
 
 	resp, err := etcdClient.Get(ctx, key)
@@ -281,26 +256,25 @@ func getAvailableTicketsFromEtcd(eventId string, tier string) (int, error) {
 }
 
 func checkIfTicketsAvailableAndReserve(eventId string, tier string, requestAmount int) (bool, error) {
-	maxRetriesStr := getEnv("MAX_RETRIES", "10")
+	maxRetriesStr := os.Getenv("MAX_RETRIES")
 	maxRetries, err := strconv.Atoi(maxRetriesStr)
 	if err != nil {
 		maxRetries = 10
 	}
 
-	retryDelayStr := getEnv("RETRY_DELAY", "10ms")
+	retryDelayStr := os.Getenv("RETRY_DELAY")
 	retryDelay, err := time.ParseDuration(retryDelayStr)
 	if err != nil {
 		retryDelay = 10 * time.Millisecond
 	}
 
-	reservationTimeoutStr := getEnv("RESERVATION_TIMEOUT", "15m")
+	reservationTimeoutStr := os.Getenv("RESERVATION_TIMEOUT")
 	reservationTimeout, err := time.ParseDuration(reservationTimeoutStr)
 	if err != nil {
 		reservationTimeout = 15 * time.Minute
 	}
 
 	for range maxRetries {
-		ctx := context.Background()
 		key := fmt.Sprintf("concert:%s:available:%s", eventId, tier)
 
 		availableTickets, err := etcdClient.Get(ctx, key)

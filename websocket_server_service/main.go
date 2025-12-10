@@ -5,12 +5,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
 
@@ -22,48 +20,36 @@ var (
 	rdb *redis.Client
 )
 
-type Client struct {
-	conn     *websocket.Conn
-	userID   int
-	eventID  string
-}
-
-type NewQueueUpdateMessage struct {
-	EstimatedWaitTime  int    `json:"estimatedWaitTime"`
-	PositionInQueue    int    `json:"positionInQueue"`
-	PeopleAheadInQueue int    `json:"peopleAheadInQueue"`
-	TotalPeopleInQueue int    `json:"totalPeopleInQueue"`
-	AcceptedTokenId    string `json:"acceptedTokenId"`
-}
-
 func initRedis() {
 	redisAddr := os.Getenv("REDIS_ADDR")
 
 	rdb = redis.NewClient(&redis.Options{
 		Addr:            redisAddr,
-		Password:        "", // no password set
-		DB:              0,  // use default DB
+		Password:        "",
+		DB:              0,
 		DisableIdentity: true,
-		PoolSize:        1000, // Increase pool size for many connections
+		PoolSize:        1000,
 		MinIdleConns:    100,
 	})
+
+	_, err := rdb.Ping(ctx).Result()
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	log.Println("Connected to Redis")
 }
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU() - 2) // use almost all CPUs
-
 	godotenv.Load()
 
 	initRedis()
 
-	router := mux.NewRouter()
-	router.HandleFunc("/ws", authenticateJWT(handleWebSocket))
-	http.Handle("/", router)
+	http.HandleFunc("/ws", authenticateJWT(handleWebSocket))
 
 	serverPort := os.Getenv("SERVER_PORT")
 
 	log.Printf("WebSocket server started on :%s", serverPort)
-	log.Fatal(http.ListenAndServe(":"+serverPort, router))
+	log.Fatal(http.ListenAndServe(":"+serverPort, nil))
 }
 
 func upgradeConnection(w http.ResponseWriter, r *http.Request) *websocket.Conn {
@@ -102,14 +88,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("auth_token")
 	if err != nil {
 		log.Printf("No auth_token cookie found for userID")
+		return
 	}
 	tokenString := cookie.Value
 	userID := extractUserIDFromJWT(tokenString)
 
 	client := &Client{
-		conn:     conn,
-		userID:   userID,
-		eventID:  eventID,
+		conn:    conn,
+		userID:  userID,
+		eventID: eventID,
 	}
 
 	log.Printf("Generated userID: %d for eventId: %s", userID, eventID)
@@ -121,16 +108,12 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer removeFromQueue(queueKey, userID)
 
-	done := make(chan struct{})
-
-	go sendQueueUpdates(client, queueKey, done)
-	awaitMessages(client, done)
+	sendQueueUpdates(client, queueKey)
 
 	log.Printf("WebSocket connection closed - eventId: %s, userId: %d", eventID, userID)
 }
 
 func addToQueue(queueKey string, userID int) error {
-	// koristi se timestamp kao score jer on osigurava redoslijed
 	score := float64(time.Now().Unix())
 	err := rdb.ZAdd(ctx, queueKey, redis.Z{
 		Score:  score,
@@ -209,7 +192,7 @@ func sendUpdate(client *Client, queueKey string) (bool, error) {
 	return shouldClose, nil
 }
 
-func sendQueueUpdates(client *Client, queueKey string, done chan struct{}) {
+func sendQueueUpdates(client *Client, queueKey string) {
 	shouldClose, err := sendUpdate(client, queueKey)
 
 	if err != nil {
@@ -218,38 +201,28 @@ func sendQueueUpdates(client *Client, queueKey string, done chan struct{}) {
 	} else if shouldClose {
 		log.Printf("Client %d accepted with token, closing connection", client.userID)
 
-		// Send close message (polite notification)
 		client.conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "accepted"),
 			time.Now().Add(time.Second))
 
-		// FORCE close the underlying connection - don't wait for client
 		client.conn.Close()
 		return
 	}
 
-	// send update every x seconds
-	updateTimeMsStr, _ :=  strconv.ParseInt(os.Getenv("WEBSOCKET_UPDATE_TIME_MS"), 10, 64)
+	updateTimeMsStr, _ := strconv.ParseInt(os.Getenv("WEBSOCKET_UPDATE_TIME_MS"), 10, 64)
 	ticker := time.NewTicker(time.Duration(updateTimeMsStr) * time.Millisecond)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			shouldClose, err := sendUpdate(client, queueKey)
+	for range ticker.C {
+		shouldClose, err := sendUpdate(client, queueKey)
 
-			if err != nil {
-				return
-			} else if shouldClose {
-				log.Printf("Client %d accepted with token, closing connection", client.userID)
-				client.conn.WriteControl(websocket.CloseMessage,
-					websocket.FormatCloseMessage(websocket.CloseNormalClosure, "accepted"),
-					time.Now().Add(time.Second))
-				return
-			}
-
-		case <-done:
-			log.Printf("Received done signal for client %d", client.userID)
+		if err != nil {
+			return
+		} else if shouldClose {
+			log.Printf("Client %d accepted with token, closing connection", client.userID)
+			client.conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "accepted"),
+				time.Now().Add(time.Second))
 			return
 		}
 	}
@@ -257,10 +230,10 @@ func sendQueueUpdates(client *Client, queueKey string, done chan struct{}) {
 
 func generateAdmissionJWT(userID int, eventID string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
-	
+
 	claims := &AdmissionsClaims{
 		EventID: eventID,
-		UserID:   userID,
+		UserID:  userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -269,26 +242,4 @@ func generateAdmissionJWT(userID int, eventID string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(getJWTSecret())
-}
-
-func awaitMessages(client *Client, done chan struct{}) {
-	defer close(done)
-
-	for {
-		var msg map[string]any
-		err := client.conn.ReadJSON(&msg)
-
-		if err != nil {
-			log.Printf("Error reading message from userId %d: %v", client.userID, err)
-			break
-		}
-		log.Printf("Received message from userId %d: %v", client.userID, msg)
-
-		// Echo back
-		err = client.conn.WriteJSON(msg)
-		if err != nil {
-			log.Printf("Error writing message to userId %d: %v", client.userID, err)
-			break
-		}
-	}
 }

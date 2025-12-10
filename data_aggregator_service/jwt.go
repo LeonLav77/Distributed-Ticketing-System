@@ -7,16 +7,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-type UserClaims struct {
-	Username string `json:"username"`
-	UserID   int    `json:"user_id"`
-	jwt.RegisteredClaims
-}
-
 func getJWTSecret() []byte {
 	secret := os.Getenv("JWT_SECRET")
 	return []byte(secret)
