@@ -314,7 +314,8 @@ err \= bcrypt.CompareHashAndPassword(
 
 ## 8\. Kompletni flow sustava:
 
-![][image3]
+<img width="1921" height="1161" alt="Untitled Diagram-Microservices Architecture drawio (1)" src="https://github.com/user-attachments/assets/347b1fda-c31f-4000-8f4e-312b7a25bc91" />
+
 
 ## 9\. Zasebno postavljanje projekta
 
