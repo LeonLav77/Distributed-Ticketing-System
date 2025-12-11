@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	"github.com/lucsky/cuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -322,7 +323,7 @@ func checkIfTicketsAvailableAndReserve(eventId string, tier string, requestAmoun
 }
 
 func generateOrderReferenceID() string {
-	return fmt.Sprintf("%d-%s", time.Now().UnixMilli(), randomString(20))
+	return cuid.New()
 }
 
 func randomString(length int) string {

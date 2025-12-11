@@ -7,6 +7,7 @@ toolchain go1.24.9
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/joho/godotenv v1.5.1
+	github.com/lucsky/cuid v1.2.1
 	github.com/redis/go-redis/v9 v9.16.0
 	github.com/streadway/amqp v1.1.0
 	go.etcd.io/etcd/client/v3 v3.6.5

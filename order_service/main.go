@@ -10,12 +10,14 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	"github.com/streadway/amqp"
 )
 
 var (
 	db *sql.DB
+	duplicatePGErrorCode string = "23505"
 )
 
 func setupDatabase() error {
@@ -114,10 +116,21 @@ func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery) {
 
 		log.Printf("Received order created message: %+v\n", data)
 
+		var existingOrderID int
+		checkQuery := `SELECT id FROM orders WHERE order_reference_id = $1`
+		err = db.QueryRow(checkQuery, data.OrderReferenceId).Scan(&existingOrderID)
+		
+		if err == nil {
+			message.Ack(false) // Ack jer vec postoji
+			continue
+		} else if err != sql.ErrNoRows {
+			message.Nack(false, true) // Nack probaj opet
+			continue
+		}
+
 		tx, err := db.Begin()
 		if err != nil {
-			log.Printf("Failed to begin transaction: %v\n", err)
-			message.Nack(false, false)
+			message.Nack(false, true)
 			continue
 		}
 
@@ -127,10 +140,13 @@ func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery) {
 
 		err = tx.QueryRow(query, data.UserID, data.EventID, data.OrderReferenceId, data.Quantity).Scan(&orderID)
 		if err != nil {
-			log.Printf("Failed to insert order: %v\n", err)
-			tx.Rollback()
-			message.Nack(false, false)
-			continue
+			if pqErr, ok := err.(*pq.Error); ok {
+				if string(pqErr.Code) == duplicatePGErrorCode {
+					tx.Rollback()
+					message.Ack(false) // Ack jer je duplicate u meduvremenu
+					continue
+				}
+			}
 		}
 
 		for i := 0; i < data.Quantity; i++ {
@@ -150,7 +166,7 @@ func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery) {
 			if err != nil {
 				log.Printf("Failed to insert ticket: %v\n", err)
 				tx.Rollback()
-				message.Nack(false, false)
+				message.Nack(false, true)
 				break
 			}
 		}
@@ -162,12 +178,9 @@ func handleOrderCreatedMessages(orderCreatedMessages <-chan amqp.Delivery) {
 		err = tx.Commit()
 		if err != nil {
 			log.Printf("Failed to commit transaction: %v\n", err)
-			message.Nack(false, false)
+			message.Nack(false, true)
 			continue
 		}
-
-		log.Printf("Order created successfully with ID %d for user ID %d with %d tickets\n",
-			orderID, data.UserID, data.Quantity)
 
 		message.Ack(false)
 	}
@@ -191,11 +204,9 @@ func handleOrderSuccessMessages(orderSuccessMessages <-chan amqp.Delivery) {
 		_, err = db.Exec(query, data.OrderReferenceId)
 		if err != nil {
 			log.Printf("Failed to update order status: %v\n", err)
-			message.Nack(false, false)
+			message.Nack(false, true)
 			continue
 		}
-
-		log.Printf("Order status updated to completed for order reference ID %s\n", data.OrderReferenceId)
 
 		message.Ack(false)
 	}
