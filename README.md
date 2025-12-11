@@ -40,8 +40,7 @@ Ovaj pristup omogućava horizontalno skaliranje \- dodavanje novih instanci serv
 ETCD je odabran kao distribuirana key-value baza za spremanje trenutnog stanja dostupnih karata. Koristi Raft konsenzus algoritam gdje svi nodovi moraju postići dogovor o stanju podataka. Koristi se u distribuiranom sustavu zbog otpornosti na pad jednog servisa, te rad unatoč tome
 
 **Rezervacija karata s optimističnim transakcijama:**
-
-go
+'''
 
 *// Dohvati trenutno stanje karata*
 
@@ -62,7 +61,7 @@ etcdClient.Txn(ctx).
     Commit()
 
 Compare-And-Swap (CAS) operacija osigurava da više korisnika ne može istovremeno rezervirati iste karte. Ako se broj karata promijeni između čitanja i pisanja, transakcija se odbija i pokušava ponovno. Pokušava se n puta koji je u slučaju ovog sustava postavljen na 10 u varijablama okruženja
-
+'''
 ## **3\. Redis za caching i queue**
 
 ### **3.1 Tickets Redis**
