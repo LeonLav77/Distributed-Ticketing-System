@@ -56,8 +56,11 @@ func main() {
 	http.HandleFunc("/api/get-available-tickets", handleGetAvailableTickets)
 	http.HandleFunc("/api/reserve-tickets", handleReserveTickets)
 	http.HandleFunc("/api/webhooks/", handleWebhook)
+	http.HandleFunc("/webhooks/", handleWebhook)
 	http.HandleFunc("/api/profile", handleProfile)
 	http.HandleFunc("/ws", handleWebSocketProxy)
+
+	http.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.Dir(filepath.Join(staticFilesPath, "js")))))
 
 	// Auth pages
 	http.HandleFunc("/login", renderPage("login.html"))
@@ -73,6 +76,7 @@ func main() {
 	}))
 	http.HandleFunc("/profile", authenticateJWT(renderPage("profile.html")))
 	http.HandleFunc("/choose-tickets", authenticateJWT(renderPage("choose-tickets.html")))
+	http.HandleFunc("/marketplace", renderPage("marketplace.html"))
 
 	// Public routes
 	http.HandleFunc("/", renderPage("index.html"))

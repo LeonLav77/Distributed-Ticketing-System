@@ -154,7 +154,10 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	webhookURL := fmt.Sprintf("%s%s", ticketServiceURL, r.URL.Path)
-	
+	if r.URL.RawQuery != "" {
+		webhookURL = fmt.Sprintf("%s?%s", webhookURL, r.URL.RawQuery)
+	}
+
 	req, err := http.NewRequest(r.Method, webhookURL, bytes.NewBuffer(body))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to create request")
@@ -163,7 +166,11 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 
-	client := &http.Client{}
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Failed to connect to ticket service at %s: %v", webhookURL, err)
@@ -174,7 +181,12 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 
-	w.Header().Set("Content-Type", "application/json")
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
 	w.WriteHeader(resp.StatusCode)
 	w.Write(respBody)
 }

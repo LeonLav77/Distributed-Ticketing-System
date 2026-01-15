@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Marketplace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script type="module" src="/js/marketplace.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div x-data="marketplaceApp()" x-init="init()">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl font-semibold text-gray-900">Ticket Marketplace</h1>
+                        <p class="text-sm text-gray-500 mt-1">Buy and sell event tickets as NFTs</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <a href="/" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition">
+                            Back to Events
+                        </a>
+                        <a href="/profile" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition">
+                            My Profile
+                        </a>
+                        <button
+                            x-show="!walletConnected"
+                            @click="connectWallet()"
+                            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">
+                            Connect Wallet
+                        </button>
+                        <button
+                            x-show="walletConnected"
+                            class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg cursor-default">
+                            <span x-text="walletAddress.substring(0, 6) + '...' + walletAddress.substring(38)"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8">
+                    <button
+                        @click="activeTab = 'browse'"
+                        :class="activeTab === 'browse' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                        Browse Listings
+                    </button>
+                    <button
+                        @click="activeTab = 'myTickets'"
+                        :class="activeTab === 'myTickets' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                        My NFT Tickets
+                    </button>
+                    <button
+                        @click="activeTab = 'myListings'"
+                        :class="activeTab === 'myListings' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                        My Listings
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+            <!-- Loading State -->
+            <div x-show="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="i in 6">
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <div class="skeleton h-48 w-full rounded mb-4"></div>
+                        <div class="skeleton h-6 w-3/4 rounded mb-2"></div>
+                        <div class="skeleton h-4 w-1/2 rounded"></div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Error State -->
+            <div x-show="error && !loading" class="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
+                <p class="font-medium">Unable to load marketplace</p>
+                <p class="text-sm mt-1" x-text="error"></p>
+            </div>
+
+            <!-- Browse Listings Tab -->
+            <div x-show="!loading && !error && activeTab === 'browse'">
+                <div x-show="listings.length === 0" class="bg-white rounded-lg shadow-sm p-12 text-center">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No listings available</h3>
+                    <p class="text-gray-500">Check back later for available tickets!</p>
+                </div>
+
+                <div x-show="listings.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <template x-for="listing in listings" :key="listing.tokenId">
+                        <div class="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition">
+                            <div class="aspect-video bg-gray-100 flex items-center justify-center">
+                                <img
+                                    x-show="listing.metadata && listing.metadata.image"
+                                    :src="listing.metadata?.image?.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/')"
+                                    :alt="listing.metadata?.name"
+                                    class="w-full h-full object-cover"
+                                >
+                                <svg x-show="!listing.metadata?.image" class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path>
+                                </svg>
+                            </div>
+                            <div class="p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-2" x-text="listing.metadata?.name || 'Event Ticket'"></h3>
+                                <p class="text-sm text-gray-600 mb-4" x-text="listing.metadata?.description || 'NFT Ticket'"></p>
+
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-sm text-gray-500">Token ID:</span>
+                                    <span class="text-sm font-mono font-semibold" x-text="listing.tokenId"></span>
+                                </div>
+
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-sm text-gray-500">Price:</span>
+                                    <span class="text-lg font-bold text-gray-900" x-text="listing.priceETH + ' ETH'"></span>
+                                </div>
+
+                                <button
+                                    @click="buyTicket(listing)"
+                                    :disabled="!walletConnected || listing.seller.toLowerCase() === walletAddress.toLowerCase()"
+                                    class="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                    <span x-show="listing.seller.toLowerCase() !== walletAddress.toLowerCase()">Buy Ticket</span>
+                                    <span x-show="listing.seller.toLowerCase() === walletAddress.toLowerCase()">Your Listing</span>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- My NFT Tickets Tab -->
+            <div x-show="!loading && !error && activeTab === 'myTickets'">
+                <div x-show="!walletConnected" class="bg-white rounded-lg shadow-sm p-12 text-center">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Connect your wallet</h3>
+                    <p class="text-gray-500 mb-6">Connect your wallet to view your NFT tickets</p>
+                    <button @click="connectWallet()" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">
+                        Connect Wallet
+                    </button>
+                </div>
+
+                <div x-show="walletConnected && myTickets.length === 0" class="bg-white rounded-lg shadow-sm p-12 text-center">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No tickets yet</h3>
+                    <p class="text-gray-500">You don't own any NFT tickets yet</p>
+                </div>
+
+                <div x-show="walletConnected && myTickets.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <template x-for="ticket in myTickets" :key="ticket.tokenId">
+                        <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                            <div class="aspect-video bg-gray-100 flex items-center justify-center">
+                                <img
+                                    x-show="ticket.metadata && ticket.metadata.image"
+                                    :src="ticket.metadata?.image?.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/')"
+                                    :alt="ticket.metadata?.name"
+                                    class="w-full h-full object-cover"
+                                >
+                                <svg x-show="!ticket.metadata?.image" class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path>
+                                </svg>
+                            </div>
+                            <div class="p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-2" x-text="ticket.metadata?.name || 'Event Ticket'"></h3>
+                                <p class="text-sm text-gray-600 mb-4" x-text="ticket.metadata?.description || 'NFT Ticket'"></p>
+
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-sm text-gray-500">Token ID:</span>
+                                    <span class="text-sm font-mono font-semibold" x-text="ticket.tokenId"></span>
+                                </div>
+
+                                <button
+                                    x-show="!ticket.isListed"
+                                    @click="showListModal(ticket)"
+                                    class="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition">
+                                    List for Sale
+                                </button>
+
+                                <div x-show="ticket.isListed" class="text-sm text-center text-gray-500 py-2">
+                                    Listed for <span class="font-semibold" x-text="ticket.listingPrice + ' ETH'"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- My Listings Tab -->
+            <div x-show="!loading && !error && activeTab === 'myListings'">
+                <div x-show="!walletConnected" class="bg-white rounded-lg shadow-sm p-12 text-center">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Connect your wallet</h3>
+                    <p class="text-gray-500 mb-6">Connect your wallet to view your listings</p>
+                    <button @click="connectWallet()" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">
+                        Connect Wallet
+                    </button>
+                </div>
+
+                <div x-show="walletConnected && myListings.length === 0" class="bg-white rounded-lg shadow-sm p-12 text-center">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No active listings</h3>
+                    <p class="text-gray-500">You haven't listed any tickets for sale yet</p>
+                </div>
+
+                <div x-show="walletConnected && myListings.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <template x-for="listing in myListings" :key="listing.tokenId">
+                        <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                            <div class="aspect-video bg-gray-100 flex items-center justify-center">
+                                <img
+                                    x-show="listing.metadata && listing.metadata.image"
+                                    :src="listing.metadata?.image?.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/')"
+                                    :alt="listing.metadata?.name"
+                                    class="w-full h-full object-cover"
+                                >
+                                <svg x-show="!listing.metadata?.image" class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path>
+                                </svg>
+                            </div>
+                            <div class="p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-2" x-text="listing.metadata?.name || 'Event Ticket'"></h3>
+                                <p class="text-sm text-gray-600 mb-4" x-text="listing.metadata?.description || 'NFT Ticket'"></p>
+
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-sm text-gray-500">Token ID:</span>
+                                    <span class="text-sm font-mono font-semibold" x-text="listing.tokenId"></span>
+                                </div>
+
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-sm text-gray-500">Listed Price:</span>
+                                    <span class="text-lg font-bold text-gray-900" x-text="listing.priceETH + ' ETH'"></span>
+                                </div>
+
+                                <div class="flex space-x-2">
+                                    <button
+                                        @click="showUpdatePriceModal(listing)"
+                                        class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+                                        Update Price
+                                    </button>
+                                    <button
+                                        @click="cancelListing(listing.tokenId)"
+                                        class="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- List Ticket Modal -->
+        <div x-show="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="showModal = false">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">List Ticket for Sale</h3>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Price (ETH)</label>
+                    <input
+                        x-model="modalPrice"
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        placeholder="0.1"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex space-x-3">
+                    <button
+                        @click="showModal = false"
+                        class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+                        Cancel
+                    </button>
+                    <button
+                        @click="confirmListTicket()"
+                        class="flex-1 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition">
+                        List Ticket
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
