@@ -67,15 +67,10 @@ function marketplaceApp() {
             this.loading = true;
             this.error = null;
 
-            try {
-                await Promise.all([
-                    this.loadListings(),
-                    this.walletConnected ? this.loadMyTickets() : Promise.resolve()
-                ]);
-            } catch (err) {
-                this.error = err.message;
-            } finally {
-                this.loading = false;
+            await this.loadListings();
+            
+            if (this.walletConnected) {
+                await this.loadMyTickets();
             }
         },
 
@@ -85,24 +80,26 @@ function marketplaceApp() {
                 toBlock: 'latest'
             });
 
-            const tokenIds = [...new Set(events.map(e => e.returnValues.tokenId))];
-            const listings = await Promise.all(
-                tokenIds.map(async (tokenId) => {
-                    const listing = await marketplaceContract.methods.listings(tokenId).call();
-                    if (!listing.active) return null;
+            let eventsTokenIds = events.map(e => e.returnValues.tokenId);
+            const tokenIds = [...new Set(eventsTokenIds)];
 
+            const listings = [];
+            for (const tokenId of tokenIds) {
+                const listing = await marketplaceContract.methods.listings(tokenId).call();
+                
+                if (listing.active) {
                     const tokenURI = await ticketContract.methods.tokenURI(tokenId).call();
                     const metadata = await fetchMetadata(tokenURI);
 
-                    return {
+                    listings.push({
                         tokenId,
                         seller: listing.seller,
                         price: listing.price,
                         priceETH: web3.utils.fromWei(listing.price, 'ether'),
                         metadata
-                    };
-                })
-            );
+                    });
+                }
+            }
 
             this.listings = listings.filter(Boolean);
         },
@@ -114,28 +111,28 @@ function marketplaceApp() {
                 toBlock: 'latest'
             });
 
-            const tokenIds = [...new Set(events.map(e => e.returnValues.tokenId))];
-            const tickets = await Promise.all(
-                tokenIds.map(async (tokenId) => {
-                    try {
-                        const owner = await ticketContract.methods.ownerOf(tokenId).call();
-                        if (owner.toLowerCase() !== this.walletAddress.toLowerCase()) return null;
+            let eventsTokenIds = events.map(e => e.returnValues.tokenId);
+            const tokenIds = [...new Set(eventsTokenIds)];
 
-                        const tokenURI = await ticketContract.methods.tokenURI(tokenId).call();
-                        const metadata = await fetchMetadata(tokenURI);
-                        const listing = await marketplaceContract.methods.listings(tokenId).call().catch(() => ({ active: false }));
+            const tickets = [];
 
-                        return {
-                            tokenId,
-                            metadata,
-                            isListed: listing.active && listing.seller.toLowerCase() === this.walletAddress.toLowerCase(),
-                            listingPrice: listing.active ? web3.utils.fromWei(listing.price, 'ether') : '0'
-                        };
-                    } catch {
-                        return null;
-                    }
-                })
-            );
+            for (const tokenId of tokenIds) {
+                const owner = await ticketContract.methods.ownerOf(tokenId).call();
+                if (owner.toLowerCase() !== this.walletAddress.toLowerCase()) continue;
+
+                const tokenURI = await ticketContract.methods.tokenURI(tokenId).call();
+                const metadata = await fetchMetadata(tokenURI);
+                
+                let listing = { active: false };
+                listing = await marketplaceContract.methods.listings(tokenId).call();
+
+                tickets.push({
+                    tokenId,
+                    metadata,
+                    isListed: listing.active && listing.seller.toLowerCase() === this.walletAddress.toLowerCase(),
+                    listingPrice: listing.active ? web3.utils.fromWei(listing.price, 'ether') : '0'
+                });
+            }
 
             this.myTickets = tickets.filter(Boolean);
         },
@@ -185,14 +182,8 @@ function marketplaceApp() {
         async cancelListing(tokenId) {
             if (!confirm('Cancel this listing?')) return;
 
-            try {
-                await marketplaceContract.methods.cancelListing(tokenId)
-                    .send({ from: this.walletAddress });
-                alert('Listing cancelled!');
-                await this.loadData();
-            } catch (error) {
-                alert('Failed to cancel: ' + error.message);
-            }
+            await marketplaceContract.methods.cancelListing(tokenId).send({ from: this.walletAddress });
+            await this.loadData();
         },
 
         async buyTicket(listing) {
@@ -201,14 +192,8 @@ function marketplaceApp() {
                 return;
             }
 
-            try {
-                await marketplaceContract.methods.buyTicket(listing.tokenId)
-                    .send({ from: this.walletAddress, value: listing.price });
-                alert('Ticket purchased!');
-                await this.loadData();
-            } catch (error) {
-                alert('Purchase failed: ' + error.message);
-            }
+            await marketplaceContract.methods.buyTicket(listing.tokenId).send({ from: this.walletAddress, value: listing.price });
+            await this.loadData();
         }
     };
 }

@@ -2,32 +2,6 @@ const MARKETPLACE_ABI = [
 	{
 		"inputs": [
 			{
-				"internalType": "uint256",
-				"name": "tokenId",
-				"type": "uint256"
-			}
-		],
-		"name": "buyTicket",
-		"outputs": [],
-		"stateMutability": "payable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "tokenId",
-				"type": "uint256"
-			}
-		],
-		"name": "cancelListing",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
 				"internalType": "address",
 				"name": "_ticketContract",
 				"type": "address"
@@ -35,6 +9,11 @@ const MARKETPLACE_ABI = [
 			{
 				"internalType": "uint256",
 				"name": "_platformFeePercent",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_performerFeePercent",
 				"type": "uint256"
 			},
 			{
@@ -77,24 +56,6 @@ const MARKETPLACE_ABI = [
 		],
 		"name": "ListingPriceUpdated",
 		"type": "event"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "tokenId",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "price",
-				"type": "uint256"
-			}
-		],
-		"name": "listTicket",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
 	},
 	{
 		"anonymous": false,
@@ -158,14 +119,40 @@ const MARKETPLACE_ABI = [
 				"internalType": "uint256",
 				"name": "tokenId",
 				"type": "uint256"
-			},
+			}
+		],
+		"name": "buyTicket",
+		"outputs": [],
+		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [
 			{
 				"internalType": "uint256",
-				"name": "newPrice",
+				"name": "tokenId",
 				"type": "uint256"
 			}
 		],
-		"name": "updateListingPrice",
+		"name": "cancelListing",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "tokenId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "price",
+				"type": "uint256"
+			}
+		],
+		"name": "listTicket",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -194,6 +181,19 @@ const MARKETPLACE_ABI = [
 				"internalType": "bool",
 				"name": "active",
 				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "performerFeePercent",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -230,12 +230,30 @@ const MARKETPLACE_ABI = [
 		"name": "ticketContract",
 		"outputs": [
 			{
-				"internalType": "contract IERC721",
+				"internalType": "contract ITicketToNFT",
 				"name": "",
 				"type": "address"
 			}
 		],
 		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "tokenId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "newPrice",
+				"type": "uint256"
+			}
+		],
+		"name": "updateListingPrice",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	}
 ];

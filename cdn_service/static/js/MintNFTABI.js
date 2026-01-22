@@ -254,13 +254,19 @@ const CONTRACT_ABI = [
 	{
 		"inputs": [
 			{
-				"internalType": "string",
-				"name": "orderReferenceId",
-				"type": "string"
+				"internalType": "uint256",
+				"name": "tokenId",
+				"type": "uint256"
 			}
 		],
-		"name": "checkIfOrderMinted",
-		"outputs": [],
+		"name": "getApproved",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
 		"stateMutability": "view",
 		"type": "function"
 	},
@@ -272,7 +278,7 @@ const CONTRACT_ABI = [
 				"type": "uint256"
 			}
 		],
-		"name": "getApproved",
+		"name": "getPerformer",
 		"outputs": [
 			{
 				"internalType": "address",
@@ -323,6 +329,11 @@ const CONTRACT_ABI = [
 				"internalType": "string",
 				"name": "orderReferenceId",
 				"type": "string"
+			},
+			{
+				"internalType": "address",
+				"name": "performer",
+				"type": "address"
 			}
 		],
 		"name": "mintBatch",
@@ -483,6 +494,25 @@ const CONTRACT_ABI = [
 				"internalType": "bool",
 				"name": "",
 				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "tokenPerformer",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
 			}
 		],
 		"stateMutability": "view",

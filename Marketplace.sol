@@ -3,6 +3,10 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
+interface ITicketToNFT {
+    function getPerformer(uint256 tokenId) external view returns (address);
+}
+
 contract TicketMarketplace {
     struct Listing {
         address seller;
@@ -10,8 +14,9 @@ contract TicketMarketplace {
         bool active;
     }
 
-    IERC721 public ticketContract;
+    ITicketToNFT public ticketContract;
     uint256 public platformFeePercent;
+    uint256 public performerFeePercent;
     address public platformWallet;
 
     mapping(uint256 => Listing) public listings;
@@ -21,9 +26,10 @@ contract TicketMarketplace {
     event ListingPriceUpdated(uint256 indexed tokenId, uint256 newPrice);
     event TicketSold(uint256 indexed tokenId, address indexed buyer, address indexed seller, uint256 price);
 
-    constructor(address _ticketContract, uint256 _platformFeePercent, address _platformWallet) {
-        ticketContract = IERC721(_ticketContract);
+    constructor(address _ticketContract, uint256 _platformFeePercent, uint256 _performerFeePercent, address _platformWallet) {
+        ticketContract = ITicketToNFT(_ticketContract);
         platformFeePercent = _platformFeePercent;
+        performerFeePercent = _performerFeePercent;
         platformWallet = _platformWallet;
     }
 
@@ -60,20 +66,24 @@ contract TicketMarketplace {
         checkIfListingIsActive(tokenId);
         checkIfPaymentIsCorrect(tokenId);
 
+        address performer = ticketContract.getPerformer(tokenId);
+
         uint256 platformFee = (listing.price * platformFeePercent) / 10000;
-        uint256 sellerAmount = listing.price - platformFee; 
+        uint256 performerFee = (listing.price * performerFeePercent) / 10000;
+        uint256 sellerAmount = listing.price - platformFee - performerFee;
 
         listings[tokenId].active = false;
-        ticketContract.transferFrom(listing.seller, msg.sender, tokenId);
+        IERC721(address(ticketContract)).transferFrom(listing.seller, msg.sender, tokenId);
 
         payable(listing.seller).transfer(sellerAmount);
         payable(platformWallet).transfer(platformFee);
+        payable(performer).transfer(performerFee);
 
         emit TicketSold(tokenId, msg.sender, listing.seller, listing.price);
     }
 
     function checkIfSenderOwnsTicket(uint256 tokenId) internal view {
-        require(ticketContract.ownerOf(tokenId) == msg.sender, "Not the owner");
+        require(IERC721(address(ticketContract)).ownerOf(tokenId) == msg.sender, "Not the owner");
     }
 
     function checkIfPriceIsValid(uint256 price) internal pure {
